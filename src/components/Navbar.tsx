@@ -53,14 +53,8 @@ const Navbar = () => {
   };
 
   const navItems = [
-    { title: 'Tableau de bord', path: '/', icon: Home },
-    { title: 'Parcelles', path: '/parcelles', icon: MapPin },
-    { title: 'Cultures', path: '/cultures', icon: Sprout },
-    { title: 'Inventaire', path: '/inventaire', icon: Package },
-    { title: 'Finances', path: '/finances', icon: Wallet },
-    { title: 'Statistiques', path: '/statistiques', icon: BarChart2 },
-    { title: 'Rapports', path: '/rapports', icon: FileText },
-    { title: 'Paramètres', path: '/parametres', icon: Settings },
+    { title: 'Dashboard', path: '/', icon: Home },
+    { title: 'Investors', path: '/investors', icon: Users },
   ];
 
   const isActive = (path: string) => {

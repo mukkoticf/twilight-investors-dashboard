@@ -20,84 +20,31 @@ export const useCRMContext = (): CRMContextState => {
   const [lastSync, setLastSync] = useState<Date>(new Date());
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [moduleData, setModuleData] = useState<Record<string, any>>({
-    parcelles: {
-      items: [
-        { id: 1, nom: "Parcelle Nord", surface: 12.5, culture: "Canne à Sucre", statut: "En culture" },
-        { id: 2, nom: "Parcelle Sud", surface: 8.3, culture: "Banane", statut: "En récolte" },
-        { id: 3, nom: "Parcelle Est", surface: 5.2, culture: "Ananas", statut: "En préparation" }
-      ],
+    vehicle_pur: {
+      items: [],
       columns: [
         { key: "id", header: "ID" },
-        { key: "nom", header: "Nom" },
-        { key: "surface", header: "Surface (ha)" },
-        { key: "culture", header: "Culture" },
-        { key: "statut", header: "Statut" }
+        { key: "vehicleType", header: "Vehicle Type" },
+        { key: "purchaseDate", header: "Purchase Date" },
+        { key: "amount", header: "Amount" },
+        { key: "vendor", header: "Vendor" }
       ]
     },
-    cultures: {
-      items: [
-        { id: 1, nom: "Canne à Sucre", variete: "R579", dateDebut: "2023-03-15", dateFin: "2024-03-15" },
-        { id: 2, nom: "Banane", variete: "Grande Naine", dateDebut: "2023-02-10", dateFin: "2023-12-10" },
-        { id: 3, nom: "Ananas", variete: "MD-2", dateDebut: "2023-05-05", dateFin: "2024-06-01" }
-      ],
+    quarterly_roi: {
+      items: [],
       columns: [
         { key: "id", header: "ID" },
-        { key: "nom", header: "Culture" },
-        { key: "variete", header: "Variété" },
-        { key: "dateDebut", header: "Date de début" },
-        { key: "dateFin", header: "Date de fin" }
-      ]
-    },
-    finances: {
-      items: [
-        { id: 1, type: "revenu", montant: 15000, description: "Vente récolte canne", date: "2023-06-15" },
-        { id: 2, type: "depense", montant: 5000, description: "Achat fertilisants", date: "2023-05-10" },
-        { id: 3, type: "revenu", montant: 8500, description: "Vente bananes", date: "2023-07-20" }
-      ],
-      columns: [
-        { key: "id", header: "ID" },
-        { key: "date", header: "Date" },
-        { key: "type", header: "Type" },
-        { key: "description", header: "Description" },
-        { key: "montant", header: "Montant (€)" }
-      ]
-    },
-    statistiques: {
-      items: [
-        { periode: "2023-T1", cultureId: 1, rendement: 8.2, revenus: 12500, couts: 4200 },
-        { periode: "2023-T2", cultureId: 1, rendement: 8.5, revenus: 13000, couts: 4100 },
-        { periode: "2023-T1", cultureId: 2, rendement: 15.3, revenus: 7800, couts: 2100 }
-      ],
-      columns: [
-        { key: "periode", header: "Période" },
-        { key: "cultureId", header: "Culture ID" },
-        { key: "rendement", header: "Rendement (t/ha)" },
-        { key: "revenus", header: "Revenus (€)" },
-        { key: "couts", header: "Coûts (€)" }
-      ]
-    },
-    inventaire: {
-      items: [
-        { id: 1, nom: "Engrais NPK", categorie: "Intrants", quantite: 500, unite: "kg", prix: 2.5 },
-        { id: 2, nom: "Pesticide Bio", categorie: "Intrants", quantite: 50, unite: "L", prix: 18.75 },
-        { id: 3, nom: "Tracteur", categorie: "Matériel", quantite: 2, unite: "unités", prix: 25000 }
-      ],
-      columns: [
-        { key: "id", header: "ID" },
-        { key: "nom", header: "Nom" },
-        { key: "categorie", header: "Catégorie" },
-        { key: "quantite", header: "Quantité" },
-        { key: "unite", header: "Unité" },
-        { key: "prix", header: "Prix unitaire (€)" }
+        { key: "quarter", header: "Quarter" },
+        { key: "year", header: "Year" },
+        { key: "investment", header: "Investment" },
+        { key: "return", header: "Return" },
+        { key: "roi", header: "ROI (%)" }
       ]
     }
   });
   const [activeModules, setActiveModules] = useState<string[]>([
-    'parcelles',
-    'cultures',
-    'finances',
-    'statistiques',
-    'inventaire'
+    'vehicle_pur',
+    'quarterly_roi'
   ]);
   
   // Nom de l'entreprise
@@ -211,12 +158,8 @@ export const useCRMContext = (): CRMContextState => {
     }
     
     const moduleNames: Record<string, string> = {
-      parcelles: "Parcelles",
-      cultures: "Cultures",
-      finances: "Finances",
-      statistiques: "Statistiques",
-      inventaire: "Inventaire",
-      fiche_technique: "Fiche Technique"
+      vehicle_pur: "Vehicle Purchases",
+      quarterly_roi: "Quarterly ROI"
     };
     
     const title = `${companyName} - ${moduleNames[moduleName] || moduleName}`;
