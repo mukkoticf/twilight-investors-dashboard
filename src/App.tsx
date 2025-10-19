@@ -3,6 +3,8 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import Index from "./pages/Index";
+import InvestorsPage from "./pages/InvestorsPage";
+import VehiclePurPage from "./pages/VehiclePurPage";
 import QuarterlyRoiPage from "./pages/QuarterlyRoiPage";
 import ReportsPage from "./pages/ReportsPage";
 import PoolDetailsPage from "./pages/PoolDetailsPage";
@@ -10,11 +12,16 @@ import InvestorDetailPage from "./pages/InvestorDetailPage";
 import InvestmentDetailPage from "./pages/InvestmentDetailPage";
 import NotFound from "./pages/NotFound";
 import { useEffect } from "react";
+import { CRMProvider } from "./contexts/CRMContext";
+import { StatisticsProvider } from "./contexts/StatisticsContext";
+import { AppSettingsProvider } from "./contexts/AppSettingsContext";
 import { trackPageView } from "./utils/analytics";
 
 // Define routes configuration
 const routes = [
   { path: "/", element: <Index /> },
+  { path: "/investors", element: <InvestorsPage /> },
+  { path: "/investors/vehicle-pur", element: <VehiclePurPage /> },
   { path: "/investors/quarterly-roi", element: <QuarterlyRoiPage /> },
   { path: "/reports", element: <ReportsPage /> },
   { path: "/pools/:poolId", element: <PoolDetailsPage /> },
@@ -52,24 +59,30 @@ const RouterChangeHandler = () => {
   return null;
 };
 
-// Application main component
+// Application main component with properly nested providers
 const App = () => {
   return (
     <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        <TooltipProvider>
-          <RouterChangeHandler />
-          <Routes>
-            {routes.map((route) => (
-              <Route 
-                key={route.path} 
-                path={route.path} 
-                element={route.element} 
-              />
-            ))}
-          </Routes>
-        </TooltipProvider>
-      </BrowserRouter>
+      <AppSettingsProvider>
+        <CRMProvider>
+          <StatisticsProvider>
+            <BrowserRouter>
+              <TooltipProvider>
+                <RouterChangeHandler />
+                <Routes>
+                  {routes.map((route) => (
+                    <Route 
+                      key={route.path} 
+                      path={route.path} 
+                      element={route.element} 
+                    />
+                  ))}
+                </Routes>
+              </TooltipProvider>
+            </BrowserRouter>
+          </StatisticsProvider>
+        </CRMProvider>
+      </AppSettingsProvider>
     </QueryClientProvider>
   );
 };

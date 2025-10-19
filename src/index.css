@@ -74,11 +74,19 @@
 
     --border: 215 25% 18%;
     --input: 215 25% 18%;
+<<<<<<< HEAD
     --ring: 221 83% 53%;
 
     --sidebar-background: 224 71% 4%;
     --sidebar-foreground: 0 0% 98%;
     --sidebar-primary: 221 83% 53%;
+=======
+    --ring: 142 43% 42%;
+
+    --sidebar-background: 224 71% 4%;
+    --sidebar-foreground: 0 0% 98%;
+    --sidebar-primary: 142 43% 42%;
+>>>>>>> 03dc7b15f8731ca720cf87bbf4340cec7fc2b851
     --sidebar-primary-foreground: 0 0% 100%;
     --sidebar-accent: 215 25% 18%;
     --sidebar-accent-foreground: 0 0% 98%;
@@ -183,7 +191,7 @@
   
   /* Text gradients */
   .text-gradient {
-    @apply bg-gradient-to-r from-primary to-investor-primary-light bg-clip-text text-transparent;
+    @apply bg-gradient-to-r from-primary to-primary bg-clip-text text-transparent;
   }
   
   /* Util for perfect centering */
@@ -209,15 +217,15 @@
   }
   
   .badge-success {
-    @apply badge bg-investor-success/10 text-investor-success;
+    @apply badge bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300;
   }
   
   .badge-warning {
-    @apply badge bg-investor-warning/10 text-investor-warning;
+    @apply badge bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300;
   }
   
   .badge-danger {
-    @apply badge bg-investor-danger/10 text-investor-danger;
+    @apply badge bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300;
   }
 }
 

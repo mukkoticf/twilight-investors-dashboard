@@ -1,14 +1,4 @@
-// Simple debounce function
-const debounce = <T extends (...args: any[]) => any>(
-  func: T,
-  wait: number
-): ((...args: Parameters<T>) => void) => {
-  let timeout: NodeJS.Timeout;
-  return (...args: Parameters<T>) => {
-    clearTimeout(timeout);
-    timeout = setTimeout(() => func(...args), wait);
-  };
-};
+import { debounce } from './crm-operations';
 
 type EventCategory = 'ui' | 'data' | 'user' | 'finance' | 'parcels' | 'crops' | 'inventory';
 type EventAction = 'view' | 'click' | 'create' | 'update' | 'delete' | 'export' | 'import' | 'search' | 'filter';

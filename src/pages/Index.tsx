@@ -594,7 +594,6 @@ const Index = () => {
             </form>
           </DialogContent>
         </Dialog>
-
       </div>
     </PageLayout>
   );

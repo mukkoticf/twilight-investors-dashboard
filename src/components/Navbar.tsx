@@ -6,6 +6,10 @@ import {
   Car, 
   TrendingUp, 
   DollarSign, 
+  MapPin, 
+  Sprout, 
+  Package, 
+  Wallet, 
   BarChart2, 
   Menu, 
   X,
@@ -14,7 +18,8 @@ import {
   ChevronRight,
   Settings,
   FileText,
-  PieChart
+  PieChart,
+  Users
 } from 'lucide-react';
 
 const Navbar = () => {
@@ -53,6 +58,7 @@ const Navbar = () => {
 
   const navItems = [
     { title: 'Dashboard', path: '/', icon: Home },
+    { title: 'Investors', path: '/investors', icon: Users },
     { title: 'Quarterly ROI', path: '/investors/quarterly-roi', icon: TrendingUp },
     { title: 'Reports', path: '/reports', icon: FileText },
   ];
