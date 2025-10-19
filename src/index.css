@@ -74,19 +74,11 @@
 
     --border: 215 25% 18%;
     --input: 215 25% 18%;
-<<<<<<< HEAD
     --ring: 221 83% 53%;
 
     --sidebar-background: 224 71% 4%;
     --sidebar-foreground: 0 0% 98%;
     --sidebar-primary: 221 83% 53%;
-=======
-    --ring: 142 43% 42%;
-
-    --sidebar-background: 224 71% 4%;
-    --sidebar-foreground: 0 0% 98%;
-    --sidebar-primary: 142 43% 42%;
->>>>>>> 03dc7b15f8731ca720cf87bbf4340cec7fc2b851
     --sidebar-primary-foreground: 0 0% 100%;
     --sidebar-accent: 215 25% 18%;
     --sidebar-accent-foreground: 0 0% 98%;
