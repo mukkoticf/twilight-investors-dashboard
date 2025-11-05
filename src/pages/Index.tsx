@@ -12,6 +12,7 @@ import { Users, TrendingUp, Car, DollarSign, Building, Calendar, Filter, Plus, E
 import { usePageMetadata } from '@/hooks/use-page-metadata';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface CompanyPool {
   purchase_id: string;
@@ -35,6 +36,7 @@ interface CompanyPool {
 
 const Index = () => {
   const navigate = useNavigate();
+  const { user, investor, isAdmin } = useAuth();
   const [pools, setPools] = useState<CompanyPool[]>([]);
   const [loading, setLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -65,20 +67,34 @@ const Index = () => {
 
   useEffect(() => {
     fetchPools();
-  }, []);
+  }, [user, investor, isAdmin]);
 
   const fetchPools = async () => {
     try {
       setLoading(true);
       
-      const { data: poolsData, error: poolsError } = await (supabase as any)
-        .from('company_pools')
-        .select('*')
-        .order('created_at', { ascending: false });
+      if (isAdmin) {
+        // Admin can see all pools
+        const { data: poolsData, error: poolsError } = await (supabase as any)
+          .from('company_pools')
+          .select('*')
+          .order('created_at', { ascending: false });
 
-      if (poolsError) throw poolsError;
+        if (poolsError) throw poolsError;
+        setPools(poolsData || []);
+      } else if (user) {
+        // Investors see ALL pools (same as admin)
+        const { data: poolsData, error: poolsError } = await (supabase as any)
+          .from('company_pools')
+          .select('*')
+          .order('created_at', { ascending: false });
 
-      setPools(poolsData || []);
+        if (poolsError) throw poolsError;
+        setPools(poolsData || []);
+      } else {
+        console.log('No user data available');
+        setPools([]);
+      }
     } catch (error) {
       console.error('Error fetching pools:', error);
       toast.error('Failed to fetch pools data');
@@ -226,11 +242,18 @@ const Index = () => {
         <div className="flex justify-between items-center">
           <div>
             <h1 className="text-3xl font-bold">Pools Dashboard</h1>
+            {!isAdmin && user && (
+              <p className="text-sm text-muted-foreground mt-1">
+                Showing your investment pools
+              </p>
+            )}
           </div>
-          <Button onClick={handleAddNew} className="flex items-center gap-2">
-            <Plus className="h-4 w-4" />
-            Add New Pool
-          </Button>
+          {isAdmin && (
+            <Button onClick={handleAddNew} className="flex items-center gap-2">
+              <Plus className="h-4 w-4" />
+              Add New Pool
+            </Button>
+          )}
         </div>
 
         {/* Summary Stats Cards */}
@@ -315,13 +338,17 @@ const Index = () => {
               <p className="text-muted-foreground mb-4">
                 {searchTerm || statusFilter !== 'all' 
                   ? 'Try adjusting your filters or search terms.'
-                  : 'Get started by adding your first company pool.'
+                  : isAdmin 
+                    ? 'Get started by adding your first company pool.'
+                    : 'You have no investments in any pools yet.'
                 }
               </p>
-              <Button onClick={handleAddNew}>
-                <Plus className="h-4 w-4 mr-2" />
-                Add New Pool
-              </Button>
+              {isAdmin && (
+                <Button onClick={handleAddNew}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add New Pool
+                </Button>
+              )}
             </div>
           ) : (
             filteredPools.map((pool) => (
@@ -380,22 +407,24 @@ const Index = () => {
 
                   {/* Actions */}
                   <div className="flex gap-2 pt-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleEdit(pool);
-                      }}
-                      className="flex-1"
-                    >
-                      <Edit className="h-4 w-4 mr-2" />
-                      Edit
-                    </Button>
+                    {isAdmin && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleEdit(pool);
+                        }}
+                        className="flex-1"
+                      >
+                        <Edit className="h-4 w-4 mr-2" />
+                        Edit
+                      </Button>
+                    )}
                     <Button 
                       variant="outline" 
                       size="sm" 
-                      className="flex-1"
+                      className={isAdmin ? "flex-1" : "w-full"}
                       onClick={(e) => {
                         e.stopPropagation();
                         handleView(pool);

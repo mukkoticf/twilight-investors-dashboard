@@ -13,6 +13,7 @@ import { ArrowLeft, Edit, Building, Car, DollarSign, Shield, Users, TrendingUp, 
 import { usePageMetadata } from '@/hooks/use-page-metadata';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface CompanyPool {
   purchase_id: string;
@@ -49,6 +50,7 @@ interface InvestorInvestment {
 const PoolDetailsPage = () => {
   const { poolId } = useParams<{ poolId: string }>();
   const navigate = useNavigate();
+  const { user, isAdmin } = useAuth();
   const [pool, setPool] = useState<CompanyPool | null>(null);
   const [investorInvestments, setInvestorInvestments] = useState<InvestorInvestment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -108,7 +110,7 @@ const PoolDetailsPage = () => {
     try {
       setInvestmentsLoading(true);
       
-      const { data: investmentsData, error: investmentsError } = await (supabase as any)
+      let query = (supabase as any)
         .from('investor_investments')
         .select(`
           *,
@@ -118,7 +120,14 @@ const PoolDetailsPage = () => {
             phone
           )
         `)
-        .eq('purchase_id', poolId)
+        .eq('purchase_id', poolId);
+
+      // Filter by user_id for investors (RLS will also enforce this at DB level)
+      if (!isAdmin && user) {
+        query = query.eq('user_id', user.id);
+      }
+
+      const { data: investmentsData, error: investmentsError } = await query
         .order('created_at', { ascending: false });
 
       if (investmentsError) throw investmentsError;
@@ -304,11 +313,11 @@ const PoolDetailsPage = () => {
                   <TableRow>
                     <TableHead>Owner Names</TableHead>
                     <TableHead>Vehicle Numbers</TableHead>
-                    <TableHead>Total Cost</TableHead>
-                    <TableHead>Investor Amount</TableHead>
-                    <TableHead>Monthly EMI</TableHead>
-                    <TableHead>Total Emergency Fund</TableHead>
-                    <TableHead>Emergency Fund Remaining</TableHead>
+                    <TableHead>Total Cost</TableHead> 
+                    <TableHead>Total Investment Amount</TableHead>
+                     <TableHead>Monthly EMI</TableHead> 
+                    <TableHead>Total Emergency Fund</TableHead> 
+                    <TableHead>Emergency Fund Remaining</TableHead> 
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -333,7 +342,7 @@ const PoolDetailsPage = () => {
                     </TableCell>
                     <TableCell className="font-semibold">{formatCurrency(pool.total_cost)}</TableCell>
                     <TableCell className="font-semibold text-green-600">{formatCurrency(pool.investor_amount)}</TableCell>
-                    <TableCell className="font-semibold">{formatCurrency(pool.monthly_emi)}</TableCell>
+                    <TableCell className="font-semibold">{formatCurrency(pool.monthly_emi)}</TableCell> 
                     <TableCell className="font-semibold text-blue-600">{formatCurrency(pool.emergency_fund_investor_share)}</TableCell>
                     <TableCell className="font-semibold text-orange-600">{formatCurrency(pool.emergency_fund_remaining)}</TableCell>
                   </TableRow>

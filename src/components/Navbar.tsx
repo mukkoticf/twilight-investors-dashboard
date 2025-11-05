@@ -16,20 +16,10 @@ import {
   X,
   Sun,
   Moon,
-  ChevronRight,
-  Settings,
   FileText,
-  PieChart,
   LogOut
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 
 const Navbar = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -98,8 +88,11 @@ const Navbar = () => {
 
   const navItems = [
     { title: 'Dashboard', path: '/', icon: Home },
+    // Only show Quarterly ROI and Reports for admin
+    ...(isAdmin ? [
     { title: 'Quarterly ROI', path: '/investors/quarterly-roi', icon: TrendingUp },
     { title: 'Reports', path: '/reports', icon: FileText },
+    ] : []),
   ];
 
   const isActive = (path: string) => {
@@ -166,34 +159,19 @@ const Navbar = () => {
         </nav>
 
         <div className="p-4 border-t border-border">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button className="flex items-center space-x-3 px-3 py-2 w-full rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
-                <div className="w-8 h-8 bg-primary/10 text-primary rounded-full flex items-center justify-center">
-                  <span className="text-sm font-medium">{getUserInitials()}</span>
-                </div>
-                <div className="flex-1 min-w-0 text-left">
-                  <p className="text-sm font-medium truncate">{getUserName()}</p>
-                  <p className="text-xs text-muted-foreground truncate">{getUserEmail()}</p>
-                </div>
-                <ChevronRight className="h-4 w-4 text-muted-foreground" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
-              <div className="px-2 py-1.5">
-                <p className="text-sm font-medium">{getUserName()}</p>
-                <p className="text-xs text-muted-foreground">{getUserEmail()}</p>
-                {isAdmin && (
-                  <p className="text-xs text-primary mt-1">Administrator</p>
-                )}
-              </div>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={signOut} className="text-red-600 dark:text-red-400">
-                <LogOut className="mr-2 h-4 w-4" />
-                Sign Out
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <button 
+            onClick={signOut}
+            className="flex items-center space-x-3 px-3 py-2 w-full rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+          >
+            <div className="w-8 h-8 bg-primary/10 text-primary rounded-full flex items-center justify-center">
+              <span className="text-sm font-medium">{getUserInitials()}</span>
+            </div>
+            <div className="flex-1 min-w-0 text-left">
+              <p className="text-sm font-medium truncate">{getUserName()}</p>
+              <p className="text-xs text-muted-foreground truncate">{getUserEmail()}</p>
+            </div>
+            <LogOut className="h-4 w-4 text-muted-foreground" />
+          </button>
         </div>
       </aside>
 

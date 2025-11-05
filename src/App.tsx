@@ -40,7 +40,7 @@ const routes = [
   { 
     path: "/investors/quarterly-roi", 
     element: (
-      <ProtectedRoute>
+      <ProtectedRoute requireAdmin={true}>
         <QuarterlyRoiPage />
       </ProtectedRoute>
     ) 
@@ -48,7 +48,7 @@ const routes = [
   { 
     path: "/reports", 
     element: (
-      <ProtectedRoute>
+      <ProtectedRoute requireAdmin={true}>
         <ReportsPage />
       </ProtectedRoute>
     ) 

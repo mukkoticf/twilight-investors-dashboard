@@ -332,7 +332,6 @@ const InvestmentDetailPage = () => {
                     <TableHead>TDS Deduction</TableHead>
                     <TableHead>Net Payable Amount</TableHead>
                     <TableHead>Pool</TableHead>
-                    <TableHead>Payment Date</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -362,9 +361,6 @@ const InvestmentDetailPage = () => {
                         <Badge variant="outline" className="text-blue-600">
                           {payment.pool_name}
                         </Badge>
-                      </TableCell>
-                      <TableCell>
-                        {payment.payment_date ? new Date(payment.payment_date).toLocaleDateString() : '-'}
                       </TableCell>
                     </TableRow>
                   ))}

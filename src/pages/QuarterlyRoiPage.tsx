@@ -12,6 +12,7 @@ import { TrendingUp, Plus, Eye, CheckCircle, XCircle, Clock } from 'lucide-react
 import { usePageMetadata } from '@/hooks/use-page-metadata';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { DatePicker } from '@/components/ui/date-picker';
 
 interface QuarterlyROI {
   declaration_id: string;
@@ -31,6 +32,7 @@ interface VehiclePurchase {
   pool_name: string;
   description: string;
   status: 'Active' | 'Inactive' | 'Sold';
+  emergency_fund_remaining?: number;
 }
 
 interface Payment {
@@ -61,8 +63,12 @@ const QuarterlyRoiPage = () => {
     roi_percentage: '',
     declaration_date: '',
     purchase_id: '',
-    is_finalized: false
+    is_finalized: false,
+    deduct_emergency_fund: false,
+    emergency_fund_amount: ''
   });
+  const [selectedPoolEmergencyFund, setSelectedPoolEmergencyFund] = useState<number | null>(null);
+  const [declarationDate, setDeclarationDate] = useState<Date | undefined>(undefined);
 
   usePageMetadata({
     defaultTitle: "Quarterly ROI - Investor Dashboard",
@@ -86,10 +92,10 @@ const QuarterlyRoiPage = () => {
 
       if (roiError) throw roiError;
 
-      // Fetch company pools
+      // Fetch company pools with emergency fund data
       const { data: vehicleData, error: vehicleError } = await supabase
         .from('company_pools')
-        .select('purchase_id, pool_name, description, status')
+        .select('purchase_id, pool_name, description, status, emergency_fund_remaining')
         .eq('status', 'Active');
 
       if (vehicleError) throw vehicleError;
@@ -137,11 +143,38 @@ const QuarterlyRoiPage = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Validate emergency fund amount if deduction is enabled
+    if (formData.deduct_emergency_fund) {
+      const amount = parseFloat(formData.emergency_fund_amount);
+      if (!amount || amount <= 0) {
+        toast.error('Please enter a valid emergency fund amount');
+        return;
+      }
+      if (selectedPoolEmergencyFund !== null && amount > selectedPoolEmergencyFund) {
+        toast.error(`Emergency fund amount cannot exceed remaining amount: ${formatCurrency(selectedPoolEmergencyFund)}`);
+        return;
+      }
+    }
+    
     try {
+      // Format date as YYYY-MM-DD for database
+      const formattedDate = declarationDate ? declarationDate.toISOString().split('T')[0] : '';
+      
+      if (!formattedDate) {
+        toast.error('Please select a declaration date');
+        return;
+      }
+
       const roiData = {
-        ...formData,
+        quarter_year: formData.quarter_year,
         roi_percentage: parseFloat(formData.roi_percentage),
-        is_finalized: formData.is_finalized
+        declaration_date: formattedDate,
+        purchase_id: formData.purchase_id,
+        is_finalized: formData.is_finalized,
+        emergency_fund_deduction_amount: formData.deduct_emergency_fund 
+          ? parseFloat(formData.emergency_fund_amount) 
+          : null
       };
 
       const { data, error } = await (supabase as any)
@@ -194,8 +227,38 @@ const QuarterlyRoiPage = () => {
       roi_percentage: '',
       declaration_date: '',
       purchase_id: '',
-      is_finalized: false
+      is_finalized: false,
+      deduct_emergency_fund: false,
+      emergency_fund_amount: ''
     });
+    setSelectedPoolEmergencyFund(null);
+    setDeclarationDate(undefined);
+  };
+
+  // Fetch emergency fund when pool is selected
+  const handlePoolChange = async (purchaseId: string) => {
+    setFormData({ ...formData, purchase_id: purchaseId, deduct_emergency_fund: false, emergency_fund_amount: '' });
+    
+    if (purchaseId) {
+      try {
+        const { data: poolData, error } = await (supabase as any)
+          .from('company_pools')
+          .select('emergency_fund_remaining')
+          .eq('purchase_id', purchaseId)
+          .single();
+        
+        if (!error && poolData) {
+          setSelectedPoolEmergencyFund(poolData.emergency_fund_remaining || 0);
+        } else {
+          setSelectedPoolEmergencyFund(null);
+        }
+      } catch (error) {
+        console.error('Error fetching emergency fund:', error);
+        setSelectedPoolEmergencyFund(null);
+      }
+    } else {
+      setSelectedPoolEmergencyFund(null);
+    }
   };
 
 
@@ -352,19 +415,18 @@ const QuarterlyRoiPage = () => {
                 <div className="grid grid-cols-2 gap-4">
               <div>
                     <Label htmlFor="declaration_date">Declaration Date</Label>
-                <Input
-                      id="declaration_date"
-                      type="date"
-                      value={formData.declaration_date}
-                      onChange={(e) => setFormData({ ...formData, declaration_date: e.target.value })}
-                      required
+                <DatePicker
+                      date={declarationDate}
+                      setDate={setDeclarationDate}
+                      placeholderText="Select declaration date"
+                      className="w-full"
                 />
               </div>
                   <div>
                     <Label htmlFor="purchase_id">Vehicle Purchase</Label>
                     <Select
                       value={formData.purchase_id}
-                      onValueChange={(value) => setFormData({ ...formData, purchase_id: value })}
+                      onValueChange={handlePoolChange}
                     >
                       <SelectTrigger>
                         <SelectValue placeholder="Select vehicle purchase" />
@@ -380,23 +442,71 @@ const QuarterlyRoiPage = () => {
                   </div>
                 </div>
 
-                <div className="flex items-center space-x-2">
-                  <input
-                    type="checkbox"
-                    id="is_finalized"
-                    checked={formData.is_finalized}
-                    onChange={(e) => setFormData({ ...formData, is_finalized: e.target.checked })}
-                    className="rounded"
-                  />
-                  <Label htmlFor="is_finalized">Finalize and generate payments</Label>
-              </div>
+                {/* Emergency Fund Deduction Section */}
+                {formData.purchase_id && (
+                  <div className="space-y-4 p-4 border rounded-lg bg-muted/50">
+                    <div className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        id="deduct_emergency_fund"
+                        checked={formData.deduct_emergency_fund}
+                        onChange={(e) => setFormData({ ...formData, deduct_emergency_fund: e.target.checked, emergency_fund_amount: e.target.checked ? formData.emergency_fund_amount : '' })}
+                        className="rounded"
+                      />
+                      <Label htmlFor="deduct_emergency_fund" className="font-semibold">
+                        Deduct Emergency Fund
+                      </Label>
+                    </div>
+                    
+                    {formData.deduct_emergency_fund && (
+                      <div className="space-y-2 pl-6">
+                        {selectedPoolEmergencyFund !== null && (
+                          <p className="text-sm text-muted-foreground">
+                            Remaining Emergency Fund: <span className="font-semibold text-primary">{formatCurrency(selectedPoolEmergencyFund)}</span>
+                          </p>
+                        )}
+                        <div>
+                          <Label htmlFor="emergency_fund_amount">Emergency Fund Amount (₹)</Label>
+                          <Input
+                            id="emergency_fund_amount"
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            max={selectedPoolEmergencyFund || undefined}
+                            value={formData.emergency_fund_amount}
+                            onChange={(e) => {
+                              const value = e.target.value;
+                              if (selectedPoolEmergencyFund !== null && value) {
+                                const numValue = parseFloat(value);
+                                if (numValue > selectedPoolEmergencyFund) {
+                                  toast.error(`Amount cannot exceed remaining: ${formatCurrency(selectedPoolEmergencyFund)}`);
+                                  return;
+                                }
+                              }
+                              setFormData({ ...formData, emergency_fund_amount: value });
+                            }}
+                            placeholder="Enter amount to deduct"
+                            required={formData.deduct_emergency_fund}
+                          />
+                          {formData.emergency_fund_amount && selectedPoolEmergencyFund !== null && (
+                            <p className="text-xs text-muted-foreground mt-1">
+                              Will deduct {formatCurrency(parseFloat(formData.emergency_fund_amount) || 0)} from remaining {formatCurrency(selectedPoolEmergencyFund)}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+               
 
                 <div className="flex justify-end space-x-2">
                   <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
                     Cancel
                   </Button>
                   <Button type="submit">
-                    {formData.is_finalized ? 'Declare & Generate Payments' : 'Save Draft'}
+                    {formData.is_finalized ? 'Declare & Generate Payments' : 'Save'}
                 </Button>
               </div>
               </form>
