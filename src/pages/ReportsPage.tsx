@@ -6,10 +6,12 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
 import { usePageMetadata } from '@/hooks/use-page-metadata';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { FileText, Download, Filter, TrendingUp, DollarSign, Users, Calendar, Eye } from 'lucide-react';
+import { FileText, Upload, Filter, TrendingUp, DollarSign, Users, Calendar, Loader2, CheckCircle2, Edit, Eye, ExternalLink, Download } from 'lucide-react';
 
 interface InvestorReport {
   investor_id: string;
@@ -51,14 +53,41 @@ interface InvestorInvestmentBreakdown {
   pool_status: string;
 }
 
+interface PoolInfo {
+  purchase_id: string;
+  pool_name: string;
+}
+
+interface PoolInvestment {
+  pool_name: string;
+  investment_amount: number;
+  purchase_id: string;
+  agreement_url?: string | null;
+}
+
+interface InvestorReportWithPools extends InvestorReport {
+  pool_investments: PoolInvestment[];
+}
+
 const ReportsPage = () => {
-  const [investorReports, setInvestorReports] = useState<InvestorReport[]>([]);
+  const [investorReports, setInvestorReports] = useState<InvestorReportWithPools[]>([]);
   const [investorDetails, setInvestorDetails] = useState<InvestorQuarterlyDetail[]>([]);
   const [investmentBreakdown, setInvestmentBreakdown] = useState<InvestorInvestmentBreakdown[]>([]);
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<'table'>('table');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedInvestor, setSelectedInvestor] = useState<InvestorReport | null>(null);
+  const [selectedPoolFilter, setSelectedPoolFilter] = useState<string>('');
+  const [availablePools, setAvailablePools] = useState<PoolInfo[]>([]);
+  const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [showSuccessDialog, setShowSuccessDialog] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
+  const [uploadedFileName, setUploadedFileName] = useState<string>('');
+  const [viewAgreementUrl, setViewAgreementUrl] = useState<string | null>(null);
+  const [isViewAgreementDialogOpen, setIsViewAgreementDialogOpen] = useState(false);
+  const [selectedInvestorForUpload, setSelectedInvestorForUpload] = useState<InvestorReportWithPools | null>(null);
 
   usePageMetadata({
     defaultTitle: "Investor Reports - Investment Performance",
@@ -66,8 +95,29 @@ const ReportsPage = () => {
   });
 
   useEffect(() => {
+    fetchAvailablePools();
     fetchInvestorReports();
   }, []);
+
+  const fetchAvailablePools = async () => {
+    try {
+      const { data: poolsData, error: poolsError } = await (supabase as any)
+        .from('company_pools')
+        .select('purchase_id, pool_name')
+        .order('pool_name', { ascending: true });
+
+      if (poolsError) throw poolsError;
+
+      setAvailablePools(poolsData || []);
+      
+      // Set the first pool as default if no pool is selected
+      if (poolsData && poolsData.length > 0 && !selectedPoolFilter) {
+        setSelectedPoolFilter(poolsData[0].purchase_id);
+      }
+    } catch (error) {
+      console.error('Error fetching pools:', error);
+    }
+  };
 
   useEffect(() => {
     if (selectedInvestor) {
@@ -113,6 +163,14 @@ const ReportsPage = () => {
           // Get pool names for this investor
           const poolNames = investments.map((inv: any) => inv.company_pools?.pool_name).filter(Boolean);
           
+          // Get detailed pool investments with amounts and agreement URLs
+          const poolInvestments: PoolInvestment[] = investments.map((inv: any) => ({
+            pool_name: inv.company_pools?.pool_name || 'Unknown Pool',
+            investment_amount: inv.investment_amount || 0,
+            purchase_id: inv.purchase_id,
+            agreement_url: inv.agreement_url || null
+          }));
+          
           // Get all payments for this investor
           const { data: paymentsData, error: paymentsError } = await (supabase as any)
             .from('investor_quarterly_payments')
@@ -144,7 +202,7 @@ const ReportsPage = () => {
             new Date(b.payment_date).getTime() - new Date(a.payment_date).getTime()
           )[0];
 
-          const investorData = {
+          const investorData: InvestorReportWithPools = {
             investor_id: investor.investor_id,
             investor_name: investor.investor_name,
             email: investor.email,
@@ -159,7 +217,8 @@ const ReportsPage = () => {
             last_payment_date: lastPayment?.payment_date || null,
             total_paid: totalPaid,
             pending_amount: pendingAmount,
-            pool_names: poolNames
+            pool_names: poolNames,
+            pool_investments: poolInvestments
           };
           
           console.log(`Processed investor ${investor.investor_name}:`, investorData);
@@ -253,8 +312,27 @@ const ReportsPage = () => {
   const filteredInvestors = investorReports.filter(investor => {
     const matchesSearch = investor.investor_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          investor.email.toLowerCase().includes(searchTerm.toLowerCase());
-    return matchesSearch;
+    
+    // Always filter by selected pool
+    if (selectedPoolFilter) {
+      const selectedPoolName = availablePools.find(p => p.purchase_id === selectedPoolFilter)?.pool_name;
+      const hasInvestmentInPool = investor.pool_investments.some(
+        pi => pi.pool_name === selectedPoolName
+      );
+      return matchesSearch && hasInvestmentInPool;
+    }
+    
+    return false; // Don't show anything if no pool is selected
   });
+
+  // Get investment amount for selected pool
+  const getInvestmentForSelectedPool = (investor: InvestorReportWithPools) => {
+    if (!selectedPoolFilter) return 0;
+    
+    const selectedPoolName = availablePools.find(p => p.purchase_id === selectedPoolFilter)?.pool_name;
+    const poolInvestment = investor.pool_investments.find(pi => pi.pool_name === selectedPoolName);
+    return poolInvestment?.investment_amount || 0;
+  };
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-IN', {
@@ -282,33 +360,145 @@ const ReportsPage = () => {
     setSelectedInvestor(investor);
   };
 
-  const exportToCSV = (investor: InvestorReport) => {
-    if (!selectedInvestor || investorDetails.length === 0) return;
+  const handleUploadAgreement = (investor: InvestorReportWithPools) => {
+    setSelectedInvestorForUpload(investor);
+    setIsUploadDialogOpen(true);
+  };
 
-    const csvContent = [
-      ['Quarter', 'Pool Name', 'ROI %', 'Investment Amount', 'Investment %', 'Gross ROI', 'Emergency Deduction', 'TDS Deduction', 'Net Payable', 'Payment Status', 'Payment Date'],
-      ...investorDetails.map(detail => [
-        detail.quarter_year,
-        detail.pool_name,
-        detail.roi_percentage.toString(),
-        detail.investment_amount.toString(),
-        detail.investment_percentage.toString(),
-        detail.gross_roi_amount.toString(),
-        detail.emergency_fund_deduction.toString(),
-        detail.tds_deduction.toString(),
-        detail.net_payable_amount.toString(),
-        detail.payment_status,
-        detail.payment_date || 'Not Paid'
-      ])
-    ].map(row => row.join(',')).join('\n');
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      // Validate file type (PDF, images, etc.)
+      const validTypes = ['application/pdf', 'image/png', 'image/jpeg', 'image/jpg'];
+      if (!validTypes.includes(file.type)) {
+        toast.error('Invalid file type', {
+          description: 'Please upload a PDF or image file (PNG, JPEG, JPG)'
+        });
+        return;
+      }
+      // Validate file size (max 10MB)
+      if (file.size > 10 * 1024 * 1024) {
+        toast.error('File too large', {
+          description: 'Please upload a file smaller than 10MB'
+        });
+        return;
+      }
+      setUploadFile(file);
+    }
+  };
 
-    const blob = new Blob([csvContent], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${investor.investor_name}_investment_report.csv`;
-    a.click();
-    window.URL.revokeObjectURL(url);
+  const handleUpload = async () => {
+    if (!uploadFile || !selectedPoolFilter || !selectedInvestorForUpload) {
+      toast.error('Please select a file');
+      return;
+    }
+
+    try {
+      setUploading(true);
+      
+      const selectedPool = availablePools.find(p => p.purchase_id === selectedPoolFilter);
+      if (!selectedPool) {
+        toast.error('Pool not found');
+        setUploading(false);
+        return;
+      }
+
+      // Create a unique filename
+      const fileExt = uploadFile.name.split('.').pop();
+      const fileName = `agreements/${selectedInvestorForUpload.investor_id}/${selectedPoolFilter}/${Date.now()}.${fileExt}`;
+
+      let agreementUrl = '';
+
+      // Try to upload to Supabase Storage first
+      try {
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from('agreement_file')
+          .upload(fileName, uploadFile, {
+            cacheControl: '3600',
+            upsert: true // Allow overwriting if file exists
+          });
+
+        if (uploadError) {
+          throw uploadError;
+        }
+
+        // Get public URL if upload was successful
+        const { data: urlData } = supabase.storage
+          .from('agreement_file')
+          .getPublicUrl(fileName);
+
+        agreementUrl = urlData.publicUrl;
+      } catch (storageError: any) {
+        // If storage bucket doesn't exist, convert to base64 as fallback
+        console.warn('Storage upload failed, using base64 fallback:', storageError);
+        
+        const reader = new FileReader();
+        const base64Promise = new Promise<string>((resolve, reject) => {
+          reader.onloadend = () => {
+            resolve(reader.result as string);
+          };
+          reader.onerror = reject;
+          reader.readAsDataURL(uploadFile);
+        });
+
+        agreementUrl = await base64Promise;
+      }
+
+      // Update investor_investments table with agreement URL for this specific investor + pool
+      const { error: updateError } = await (supabase as any)
+        .from('investor_investments')
+        .update({ agreement_url: agreementUrl })
+        .eq('investor_id', selectedInvestorForUpload.investor_id)
+        .eq('purchase_id', selectedPoolFilter);
+
+      if (updateError) {
+        // Check if agreement_url column exists
+        if (updateError.code === '42703') {
+          toast.error('Database column missing', {
+            description: 'Please add agreement_url column to investor_investments table. See instructions in console.'
+          });
+          console.error('Add this column to investor_investments table:');
+          console.error('ALTER TABLE public.investor_investments ADD COLUMN agreement_url TEXT;');
+          setUploading(false);
+          return;
+        }
+        throw updateError;
+      }
+
+      // Close upload dialog and reset state immediately on success
+      setIsUploadDialogOpen(false);
+      setUploading(false);
+      setSelectedInvestorForUpload(null);
+
+      // Store filename for display
+      setUploadedFileName(uploadFile.name);
+      
+      // Refresh investor reports to get updated agreement_url
+      await fetchInvestorReports();
+      
+      // Show success dialog for 3 seconds (but don't auto-close if user wants to edit)
+      const investorName = selectedInvestorForUpload?.investor_name || 'Investor';
+      setSuccessMessage(`Agreement has been saved for ${investorName} - ${selectedPool.pool_name}.`);
+      setShowSuccessDialog(true);
+
+      // Auto-close success dialog after 3 seconds (only if still open)
+      const timeoutId = setTimeout(() => {
+        setShowSuccessDialog(false);
+      }, 3000);
+      
+      // Store timeout ID so we can clear it if user clicks edit
+      (window as any).successDialogTimeout = timeoutId;
+
+      toast.success('Agreement uploaded successfully', {
+        description: `Agreement has been saved for ${selectedInvestorForUpload.investor_name} - ${selectedPool.pool_name}.`
+      });
+    } catch (error: any) {
+      console.error('Error uploading agreement:', error);
+      toast.error('Failed to upload agreement', {
+        description: error?.message || 'Please try again'
+      });
+      setUploading(false);
+    }
   };
 
   return (
@@ -325,10 +515,24 @@ const ReportsPage = () => {
         <div className="flex flex-col sm:flex-row gap-4 max-w-2xl">
           <div className="flex-1">
             <Input
-              placeholder="Search by investor name or email..."
+              placeholder="Search..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
+          </div>
+          <div className="w-full sm:w-[250px]">
+            <Select value={selectedPoolFilter} onValueChange={setSelectedPoolFilter}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select a pool" />
+              </SelectTrigger>
+              <SelectContent>
+                {availablePools.map((pool) => (
+                  <SelectItem key={pool.purchase_id} value={pool.purchase_id}>
+                    {pool.pool_name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         </div>
 
@@ -357,50 +561,84 @@ const ReportsPage = () => {
                     <TableRow>
                       <TableHead>Investor</TableHead>
                       <TableHead>Pools Invested</TableHead>
-                      <TableHead>Total Investment</TableHead>
-                      <TableHead>Status</TableHead>
+                      <TableHead>Investment Amount</TableHead>
                       <TableHead>Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredInvestors.map((investor) => (
-                      <TableRow key={investor.investor_id}>
-                        <TableCell className="font-medium">{investor.investor_name}</TableCell>
-                        <TableCell>
-                          <div className="flex flex-wrap gap-1">
-                            {investor.pool_names.map((poolName, index) => (
-                              <Badge key={index} variant="outline" className="text-blue-600">
-                                {poolName}
-                              </Badge>
-                            ))}
-                          </div>
-                        </TableCell>
-                        <TableCell className="font-medium">{formatCurrency(investor.total_investment)}</TableCell>
-                        <TableCell>
-                          <Badge variant={investor.pending_amount > 0 ? 'secondary' : 'default'}>
-                            {investor.pending_amount > 0 ? 'Pending' : 'Up to Date'}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex gap-2">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleViewDetails(investor)}
-                            >
-                              <Eye className="h-4 w-4" />
-                            </Button>
-                            <Button 
-                              variant="outline" 
-                              size="sm"
-                              onClick={() => exportToCSV(investor)}
-                            >
-                              <Download className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                    {filteredInvestors.map((investor) => {
+                      const investmentAmount = getInvestmentForSelectedPool(investor);
+                      return (
+                        <TableRow key={investor.investor_id}>
+                          <TableCell className="font-medium">{investor.investor_name}</TableCell>
+                          <TableCell>
+                            <div className="flex flex-wrap gap-1">
+                              {investor.pool_investments
+                                .filter(pi => {
+                                  const selectedPoolName = availablePools.find(p => p.purchase_id === selectedPoolFilter)?.pool_name;
+                                  return pi.pool_name === selectedPoolName;
+                                })
+                                .map((pi, index) => (
+                                  <Badge key={index} variant="outline" className="text-blue-600">
+                                    {pi.pool_name}
+                                  </Badge>
+                                ))
+                              }
+                            </div>
+                          </TableCell>
+                          <TableCell className="font-medium text-green-600">
+                            {formatCurrency(investmentAmount)}
+                          </TableCell>
+                          <TableCell>
+                            {(() => {
+                              // Find the specific investment for this investor in the selected pool
+                              const investment = investor.pool_investments.find(
+                                pi => pi.purchase_id === selectedPoolFilter
+                              );
+                              const hasAgreement = investment?.agreement_url && investment.agreement_url.trim() !== '';
+                              
+                              if (hasAgreement) {
+                                return (
+                                  <div className="flex items-center gap-2">
+                                    <Button 
+                                      variant="outline" 
+                                      size="sm"
+                                      onClick={() => {
+                                        setViewAgreementUrl(investment.agreement_url!);
+                                        setIsViewAgreementDialogOpen(true);
+                                      }}
+                                    >
+                                      <Eye className="h-4 w-4 mr-2" />
+                                      View Agreement
+                                    </Button>
+                                    <Button 
+                                      variant="ghost" 
+                                      size="sm"
+                                      className="h-8 w-8 p-0"
+                                      onClick={() => handleUploadAgreement(investor)}
+                                      title="Edit/Replace Agreement"
+                                    >
+                                      <Edit className="h-4 w-4" />
+                                    </Button>
+                                  </div>
+                                );
+                              } else {
+                                return (
+                                  <Button 
+                                    variant="outline" 
+                                    size="sm"
+                                    onClick={() => handleUploadAgreement(investor)}
+                                  >
+                                    <Upload className="h-4 w-4 mr-2" />
+                                    Upload Agreement
+                                  </Button>
+                                );
+                              }
+                            })()}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
                   </TableBody>
                 </Table>
               </div>
@@ -537,6 +775,192 @@ const ReportsPage = () => {
             </CardContent>
           </Card>
         )}
+
+        {/* Upload Agreement Dialog */}
+        <Dialog open={isUploadDialogOpen} onOpenChange={setIsUploadDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Upload className="h-5 w-5" />
+                Upload Agreement for Pool
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Input
+                  id="agreement-file"
+                  type="file"
+                  accept=".pdf,.png,.jpg,.jpeg"
+                  onChange={handleFileSelect}
+                  disabled={uploading}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Supported formats: PDF, PNG, JPEG, JPG (Max 10MB)
+                </p>
+                {uploadFile && (
+                  <div className="mt-2 p-2 bg-muted rounded-md">
+                    <p className="text-sm text-muted-foreground">{uploadFile.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {(uploadFile.size / 1024 / 1024).toFixed(2)} MB
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setIsUploadDialogOpen(false);
+                  setUploadFile(null);
+                }}
+                disabled={uploading}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleUpload}
+                disabled={!uploadFile || uploading || !selectedPoolFilter}
+              >
+                {uploading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Uploading...
+                  </>
+                ) : (
+                  <>
+                    <Upload className="mr-2 h-4 w-4" />
+                    Upload Agreement
+                  </>
+                )}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Success Notification - Bottom Right */}
+        {showSuccessDialog && (
+          <div className="fixed bottom-4 right-4 z-50 animate-in slide-in-from-bottom-2 fade-in-0 sm:max-w-md">
+            <div className="bg-background border rounded-lg shadow-lg p-4">
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 bg-green-100 dark:bg-green-900/20 rounded-full flex items-center justify-center flex-shrink-0">
+                  <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h4 className="font-semibold text-sm">Agreement Uploaded</h4>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    {successMessage}
+                  </p>
+                  {uploadedFileName && (
+                    <div className="mt-2 flex items-center gap-2">
+                      <FileText className="h-3 w-3 text-muted-foreground" />
+                      <span className="text-xs text-muted-foreground truncate">
+                        {uploadedFileName}
+                      </span>
+                    </div>
+                  )}
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 w-8 p-0 flex-shrink-0"
+                  onClick={() => {
+                    // Clear auto-close timeout
+                    if ((window as any).successDialogTimeout) {
+                      clearTimeout((window as any).successDialogTimeout);
+                    }
+                    // Close success notification
+                    setShowSuccessDialog(false);
+                    // Reopen upload dialog
+                    setIsUploadDialogOpen(true);
+                    setUploadFile(null);
+                  }}
+                  title="Edit/Replace Agreement"
+                >
+                  <Edit className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* View Agreement Dialog */}
+        <Dialog open={isViewAgreementDialogOpen} onOpenChange={setIsViewAgreementDialogOpen}>
+          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <FileText className="h-5 w-5" />
+                Investment Agreement / Receipt
+              </DialogTitle>
+              <DialogDescription>
+                View the agreement document for this investment pool
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              {viewAgreementUrl ? (
+                <div className="w-full">
+                  <iframe
+                    src={viewAgreementUrl}
+                    className="w-full h-[600px] border rounded-lg"
+                    title="Agreement Document"
+                  />
+                  <div className="mt-4 flex justify-end gap-2">
+                    <Button
+                      variant="outline"
+                      onClick={() => window.open(viewAgreementUrl, '_blank')}
+                    >
+                      <ExternalLink className="h-4 w-4 mr-2" />
+                      Open in New Tab
+                    </Button>
+                    <Button
+                      variant="default"
+                      onClick={() => {
+                        // Handle download for both URLs and base64 data URLs
+                        if (viewAgreementUrl.startsWith('data:')) {
+                          // Base64 data URL
+                          const link = document.createElement('a');
+                          link.href = viewAgreementUrl;
+                          link.download = `agreement-${new Date().getTime()}.pdf`;
+                          document.body.appendChild(link);
+                          link.click();
+                          document.body.removeChild(link);
+                        } else {
+                          // Regular URL - fetch and download
+                          fetch(viewAgreementUrl)
+                            .then(response => response.blob())
+                            .then(blob => {
+                              const url = window.URL.createObjectURL(blob);
+                              const link = document.createElement('a');
+                              link.href = url;
+                              link.download = `agreement-${new Date().getTime()}.pdf`;
+                              document.body.appendChild(link);
+                              link.click();
+                              document.body.removeChild(link);
+                              window.URL.revokeObjectURL(url);
+                            })
+                            .catch(error => {
+                              console.error('Download error:', error);
+                              toast.error('Failed to download agreement', {
+                                description: 'Please try opening in a new tab instead'
+                              });
+                            });
+                        }
+                      }}
+                    >
+                      <Download className="h-4 w-4 mr-2" />
+                      Download Agreement
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-12">
+                  <FileText className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                  <p className="text-muted-foreground">No agreement available</p>
+                </div>
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     </PageLayout>
   );

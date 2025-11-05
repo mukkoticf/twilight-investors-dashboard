@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Users, TrendingUp, Car, DollarSign, Building, Calendar, Shield, Filter, Plus, Edit, Eye } from 'lucide-react';
+import { Users, TrendingUp, Car, DollarSign, Building, Calendar, Filter, Plus, Edit, Eye } from 'lucide-react';
 import { usePageMetadata } from '@/hooks/use-page-metadata';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -218,7 +218,6 @@ const Index = () => {
   const totalInvestment = pools.reduce((sum, pool) => sum + pool.investor_amount, 0);
   const totalVehicles = pools.reduce((sum, pool) => sum + pool.vehicle_numbers.length, 0);
   const activePools = pools.filter(pool => pool.status === 'Active').length;
-  const totalEmergencyFund = pools.reduce((sum, pool) => sum + pool.emergency_fund_remaining, 0);
 
   return (
     <PageLayout>
@@ -235,7 +234,7 @@ const Index = () => {
         </div>
 
         {/* Summary Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           <Card>
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
@@ -273,20 +272,6 @@ const Index = () => {
                 </div>
                 <div className="bg-primary/10 p-3 rounded-lg">
                   <Car className="h-6 w-6 text-primary" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">Emergency Fund</p>
-                  <p className="text-2xl font-bold">{formatCurrency(totalEmergencyFund)}</p>
-                </div>
-                <div className="bg-primary/10 p-3 rounded-lg">
-                  <Shield className="h-6 w-6 text-primary" />
                 </div>
               </div>
             </CardContent>
@@ -390,14 +375,6 @@ const Index = () => {
                     <div>
                       <p className="text-sm text-muted-foreground">Investor Amount</p>
                       <p className="font-semibold text-green-600">{formatCurrency(pool.investor_amount)}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">Monthly EMI</p>
-                      <p className="font-semibold">{formatCurrency(pool.monthly_emi)}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">Emergency Fund</p>
-                      <p className="font-semibold text-blue-600">{formatCurrency(pool.emergency_fund_remaining)}</p>
                     </div>
                   </div>
 

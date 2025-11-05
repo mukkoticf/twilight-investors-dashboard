@@ -5,7 +5,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { ArrowLeft, User, Building, DollarSign, TrendingUp, Calendar } from 'lucide-react';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { ArrowLeft, User, Building, DollarSign, TrendingUp, Calendar, FileText, ExternalLink, Download } from 'lucide-react';
 import { usePageMetadata } from '@/hooks/use-page-metadata';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -29,6 +30,7 @@ interface InvestorInvestment {
   pool_name: string;
   total_cost: number;
   status: 'Active' | 'Inactive' | 'Sold';
+  agreement_url?: string | null;
 }
 
 const InvestorDetailPage = () => {
@@ -38,6 +40,8 @@ const InvestorDetailPage = () => {
   const [investments, setInvestments] = useState<InvestorInvestment[]>([]);
   const [loading, setLoading] = useState(true);
   const [investmentsLoading, setInvestmentsLoading] = useState(true);
+  const [selectedAgreement, setSelectedAgreement] = useState<string | null>(null);
+  const [isAgreementDialogOpen, setIsAgreementDialogOpen] = useState(false);
 
   usePageMetadata({
     defaultTitle: investor ? `${investor.investor_name} - Investor Details` : "Investor Details - Investor Management",
@@ -55,19 +59,33 @@ const InvestorDetailPage = () => {
     try {
       setLoading(true);
       
+      console.log('Fetching investor details for investor_id:', investorId);
+      
       const { data: investorData, error: investorError } = await (supabase as any)
         .from('investors')
         .select('*')
         .eq('investor_id', investorId)
         .single();
 
-      if (investorError) throw investorError;
+      if (investorError) {
+        console.error('Investor query error:', investorError);
+        throw investorError;
+      }
 
+      console.log('Investor data loaded:', investorData);
       setInvestor(investorData);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching investor details:', error);
-      toast.error('Failed to fetch investor details');
-      navigate('/');
+      console.error('Error details:', {
+        message: error?.message,
+        details: error?.details,
+        hint: error?.hint,
+        code: error?.code
+      });
+      toast.error('Failed to fetch investor details', {
+        description: error?.message || 'Investor not found'
+      });
+      // Don't navigate away - let user see the error
     } finally {
       setLoading(false);
     }
@@ -77,6 +95,9 @@ const InvestorDetailPage = () => {
     try {
       setInvestmentsLoading(true);
       
+      console.log('Fetching investments for investor_id:', investorId);
+      
+      // First, try to fetch investments directly
       const { data: investmentsData, error: investmentsError } = await (supabase as any)
         .from('investor_investments')
         .select(`
@@ -90,20 +111,38 @@ const InvestorDetailPage = () => {
         .eq('investor_id', investorId)
         .order('created_at', { ascending: false });
 
-      if (investmentsError) throw investmentsError;
+      if (investmentsError) {
+        console.error('Investments query error:', investmentsError);
+        throw investmentsError;
+      }
+
+      console.log('Raw investments data:', investmentsData);
+      console.log('Number of investments found:', investmentsData?.length || 0);
 
       // Transform the data to flatten the pool information
+      // Note: agreement_url comes directly from investor_investments, not from company_pools
       const transformedData = investmentsData?.map((investment: any) => ({
         ...investment,
         pool_name: investment.company_pools?.pool_name || 'Unknown Pool',
         total_cost: investment.company_pools?.total_cost || 0,
-        status: investment.company_pools?.status || 'Unknown'
+        status: investment.company_pools?.status || 'Unknown',
+        agreement_url: investment.agreement_url || null // Get from investor_investments directly
       })) || [];
 
+      console.log('Transformed investments data:', transformedData);
       setInvestments(transformedData);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching investor investments:', error);
-      toast.error('Failed to fetch investor investments');
+      console.error('Error details:', {
+        message: error?.message,
+        details: error?.details,
+        hint: error?.hint,
+        code: error?.code
+      });
+      toast.error('Failed to fetch investor investments', {
+        description: error?.message || 'Please check the console for details'
+      });
+      setInvestments([]);
     } finally {
       setInvestmentsLoading(false);
     }
@@ -133,6 +172,17 @@ const InvestorDetailPage = () => {
 
   const totalInvestedAmount = investments.reduce((sum, investment) => sum + investment.investment_amount, 0);
   const totalPoolsInvested = investments.length;
+
+  const handleViewAgreement = (agreementUrl: string | null | undefined) => {
+    if (!agreementUrl) {
+      toast.error('Agreement not available', {
+        description: 'No agreement/receipt has been uploaded for this pool yet.'
+      });
+      return;
+    }
+    setSelectedAgreement(agreementUrl);
+    setIsAgreementDialogOpen(true);
+  };
 
   if (loading) {
     return (
@@ -175,7 +225,7 @@ const InvestorDetailPage = () => {
               className="flex items-center gap-2"
             >
               <ArrowLeft className="h-4 w-4" />
-              Back
+             
             </Button>
             <div>
               <h1 className="text-3xl font-bold">{investor.investor_name}</h1>
@@ -299,9 +349,10 @@ const InvestorDetailPage = () => {
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => navigate(`/pools/${investment.purchase_id}`)}
+                          onClick={() => handleViewAgreement(investment.agreement_url)}
                         >
-                          View Pool
+                          <FileText className="h-4 w-4 mr-2" />
+                          View Agreement
                         </Button>
                       </TableCell>
                     </TableRow>
@@ -311,6 +362,87 @@ const InvestorDetailPage = () => {
             )}
           </CardContent>
         </Card>
+
+        {/* Agreement/Receipt Dialog */}
+        <Dialog open={isAgreementDialogOpen} onOpenChange={setIsAgreementDialogOpen}>
+          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <FileText className="h-5 w-5" />
+                Investment Agreement / Receipt
+              </DialogTitle>
+              <DialogDescription>
+                View the agreement document for this investment pool
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              {selectedAgreement ? (
+                <div className="w-full">
+                  <iframe
+                    src={selectedAgreement}
+                    className="w-full h-[600px] border rounded-lg"
+                    title="Agreement Document"
+                  />
+                  <div className="mt-4 flex justify-end gap-2">
+                    <Button
+                      variant="outline"
+                      onClick={() => window.open(selectedAgreement, '_blank')}
+                    >
+                      <ExternalLink className="h-4 w-4 mr-2" />
+                      Open in New Tab
+                    </Button>
+                    <Button
+                      variant="default"
+                      onClick={() => {
+                        // Handle download for both URLs and base64 data URLs
+                        if (selectedAgreement.startsWith('data:')) {
+                          // Base64 data URL
+                          const link = document.createElement('a');
+                          link.href = selectedAgreement;
+                          link.download = `agreement-${new Date().getTime()}.pdf`;
+                          document.body.appendChild(link);
+                          link.click();
+                          document.body.removeChild(link);
+                        } else {
+                          // Regular URL - fetch and download
+                          fetch(selectedAgreement)
+                            .then(response => response.blob())
+                            .then(blob => {
+                              const url = window.URL.createObjectURL(blob);
+                              const link = document.createElement('a');
+                              link.href = url;
+                              link.download = `agreement-${new Date().getTime()}.pdf`;
+                              document.body.appendChild(link);
+                              link.click();
+                              document.body.removeChild(link);
+                              window.URL.revokeObjectURL(url);
+                            })
+                            .catch(error => {
+                              console.error('Download error:', error);
+                              toast.error('Failed to download agreement', {
+                                description: 'Please try opening in a new tab instead'
+                              });
+                            });
+                        }
+                      }}
+                    >
+                      <Download className="h-4 w-4 mr-2" />
+                      Download Agreement
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-12">
+                  <FileText className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                  <h3 className="text-lg font-semibold mb-2">Agreement not available</h3>
+                  <p className="text-muted-foreground">
+                    No agreement/receipt has been uploaded for this pool yet.
+                  </p>
+                </div>
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     </PageLayout>
   );

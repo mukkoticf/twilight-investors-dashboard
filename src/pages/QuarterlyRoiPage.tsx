@@ -552,7 +552,6 @@ const QuarterlyRoiPage = () => {
                       <TableHead>Emergency Fund</TableHead>
                       <TableHead>TDS</TableHead>
                       <TableHead>Net Payable</TableHead>
-                      <TableHead>Status</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -574,12 +573,6 @@ const QuarterlyRoiPage = () => {
                           </TableCell>
                           <TableCell className="font-medium">
                             {formatCurrency(payment.net_payable_amount)}
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-2">
-                              {getPaymentIcon(payment.payment_status)}
-                              {getPaymentStatusBadge(payment.payment_status)}
-                            </div>
                           </TableCell>
                         </TableRow>
                       ))}

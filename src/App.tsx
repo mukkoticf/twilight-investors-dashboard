@@ -3,7 +3,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import Index from "./pages/Index";
-import InvestorsPage from "./pages/InvestorsPage";
+import LoginPage from "./pages/LoginPage";
 import VehiclePurPage from "./pages/VehiclePurPage";
 import QuarterlyRoiPage from "./pages/QuarterlyRoiPage";
 import ReportsPage from "./pages/ReportsPage";
@@ -15,18 +15,68 @@ import { useEffect } from "react";
 import { CRMProvider } from "./contexts/CRMContext";
 import { StatisticsProvider } from "./contexts/StatisticsContext";
 import { AppSettingsProvider } from "./contexts/AppSettingsContext";
+import { AuthProvider } from "./contexts/AuthContext";
+import ProtectedRoute from "./components/ProtectedRoute";
 import { trackPageView } from "./utils/analytics";
 
 // Define routes configuration
 const routes = [
-  { path: "/", element: <Index /> },
-  { path: "/investors", element: <InvestorsPage /> },
-  { path: "/investors/vehicle-pur", element: <VehiclePurPage /> },
-  { path: "/investors/quarterly-roi", element: <QuarterlyRoiPage /> },
-  { path: "/reports", element: <ReportsPage /> },
-  { path: "/pools/:poolId", element: <PoolDetailsPage /> },
-  { path: "/investor/:investorId", element: <InvestorDetailPage /> },
-  { path: "/investment/:investmentId", element: <InvestmentDetailPage /> },
+  { 
+    path: "/", 
+    element: (
+      <ProtectedRoute>
+        <Index />
+      </ProtectedRoute>
+    ) 
+  },
+  { 
+    path: "/investors/vehicle-pur", 
+    element: (
+      <ProtectedRoute>
+        <VehiclePurPage />
+      </ProtectedRoute>
+    ) 
+  },
+  { 
+    path: "/investors/quarterly-roi", 
+    element: (
+      <ProtectedRoute>
+        <QuarterlyRoiPage />
+      </ProtectedRoute>
+    ) 
+  },
+  { 
+    path: "/reports", 
+    element: (
+      <ProtectedRoute>
+        <ReportsPage />
+      </ProtectedRoute>
+    ) 
+  },
+  { 
+    path: "/pools/:poolId", 
+    element: (
+      <ProtectedRoute>
+        <PoolDetailsPage />
+      </ProtectedRoute>
+    ) 
+  },
+  { 
+    path: "/investor/:investorId", 
+    element: (
+      <ProtectedRoute>
+        <InvestorDetailPage />
+      </ProtectedRoute>
+    ) 
+  },
+  { 
+    path: "/investment/:investmentId", 
+    element: (
+      <ProtectedRoute>
+        <InvestmentDetailPage />
+      </ProtectedRoute>
+    ) 
+  },
   { path: "*", element: <NotFound /> }
 ];
 
@@ -63,26 +113,29 @@ const RouterChangeHandler = () => {
 const App = () => {
   return (
     <QueryClientProvider client={queryClient}>
-      <AppSettingsProvider>
-        <CRMProvider>
-          <StatisticsProvider>
-            <BrowserRouter>
-              <TooltipProvider>
-                <RouterChangeHandler />
-                <Routes>
-                  {routes.map((route) => (
-                    <Route 
-                      key={route.path} 
-                      path={route.path} 
-                      element={route.element} 
-                    />
-                  ))}
-                </Routes>
-              </TooltipProvider>
-            </BrowserRouter>
-          </StatisticsProvider>
-        </CRMProvider>
-      </AppSettingsProvider>
+      <BrowserRouter>
+        <AuthProvider>
+          <AppSettingsProvider>
+            <CRMProvider>
+              <StatisticsProvider>
+                <TooltipProvider>
+                  <RouterChangeHandler />
+                  <Routes>
+                    <Route path="/login" element={<LoginPage />} />
+                    {routes.map((route) => (
+                      <Route 
+                        key={route.path} 
+                        path={route.path} 
+                        element={route.element} 
+                      />
+                    ))}
+                  </Routes>
+                </TooltipProvider>
+              </StatisticsProvider>
+            </CRMProvider>
+          </AppSettingsProvider>
+        </AuthProvider>
+      </BrowserRouter>
     </QueryClientProvider>
   );
 };
