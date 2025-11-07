@@ -11,6 +11,7 @@ import { Label } from '@/components/ui/label';
 import { usePageMetadata } from '@/hooks/use-page-metadata';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { formatDate } from '@/utils/crm-operations';
 import { FileText, Upload, Filter, TrendingUp, DollarSign, Users, Calendar, Loader2, CheckCircle2, Edit, Eye, ExternalLink, Download } from 'lucide-react';
 
 interface InvestorReport {
@@ -707,7 +708,7 @@ const ReportsPage = () => {
                         <TableRow key={index}>
                           <TableCell className="font-medium">{investment.pool_name}</TableCell>
                           <TableCell className="font-medium">{formatCurrency(investment.investment_amount)}</TableCell>
-                          <TableCell>{new Date(investment.investment_date).toLocaleDateString()}</TableCell>
+                          <TableCell>{formatDate(investment.investment_date)}</TableCell>
                           <TableCell>
                             <Badge variant={investment.pool_status === 'Active' ? 'default' : 'secondary'}>
                               {investment.pool_status}
@@ -763,7 +764,7 @@ const ReportsPage = () => {
                         </TableCell>
                         <TableCell>
                           {detail.payment_date 
-                            ? new Date(detail.payment_date).toLocaleDateString()
+                            ? formatDate(detail.payment_date)
                             : '-'
                           }
                         </TableCell>

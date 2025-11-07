@@ -5,11 +5,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { ArrowLeft, User, Building, DollarSign, TrendingUp, Calendar, FileText, ExternalLink, Download } from 'lucide-react';
+import { ArrowLeft, User, Building, DollarSign, TrendingUp, Calendar, FileText, Eye } from 'lucide-react';
 import { usePageMetadata } from '@/hooks/use-page-metadata';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { formatDate } from '@/utils/crm-operations';
 
 interface Investor {
   investor_id: string;
@@ -40,8 +40,6 @@ const InvestorDetailPage = () => {
   const [investments, setInvestments] = useState<InvestorInvestment[]>([]);
   const [loading, setLoading] = useState(true);
   const [investmentsLoading, setInvestmentsLoading] = useState(true);
-  const [selectedAgreement, setSelectedAgreement] = useState<string | null>(null);
-  const [isAgreementDialogOpen, setIsAgreementDialogOpen] = useState(false);
 
   usePageMetadata({
     defaultTitle: investor ? `${investor.investor_name} - Investor Details` : "Investor Details - Investor Management",
@@ -180,8 +178,8 @@ const InvestorDetailPage = () => {
       });
       return;
     }
-    setSelectedAgreement(agreementUrl);
-    setIsAgreementDialogOpen(true);
+    // Open agreement directly in browser's native PDF viewer (full tab)
+    window.open(agreementUrl, '_blank');
   };
 
   if (loading) {
@@ -235,45 +233,28 @@ const InvestorDetailPage = () => {
         </div>
 
         {/* Investment Summary */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Pools Invested</CardTitle>
-              <Building className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{totalPoolsInvested}</div>
-              <p className="text-xs text-muted-foreground">
-                Active investments
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Amount Invested</CardTitle>
-              <DollarSign className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-green-600">{formatCurrency(totalInvestedAmount)}</div>
-              <p className="text-xs text-muted-foreground">
-                Across all pools
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Average Investment</CardTitle>
-              <TrendingUp className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">
-                {totalPoolsInvested > 0 ? formatCurrency(totalInvestedAmount / totalPoolsInvested) : formatCurrency(0)}
+        <div className="flex gap-4">
+          <Card className="min-w-fit flex-1 max-w-md">
+            <CardContent className="p-5">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">No of Investments</p>
+                <p className="text-2xl font-bold text-black dark:text-white">{totalPoolsInvested}</p>
+                <p className="text-xs text-muted-foreground">
+                  Active investments
+                </p>
               </div>
-              <p className="text-xs text-muted-foreground">
-                Per pool investment
-              </p>
+            </CardContent>
+          </Card>
+
+          <Card className="min-w-fit flex-1 max-w-md">
+            <CardContent className="p-5">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Total Amount Invested</p>
+                <p className="text-2xl font-bold text-green-600">{formatCurrency(totalInvestedAmount)}</p>
+                <p className="text-xs text-muted-foreground">
+                  Across all pools
+                </p>
+              </div>
             </CardContent>
           </Card>
         </div>
@@ -284,11 +265,8 @@ const InvestorDetailPage = () => {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Building className="h-5 w-5" />
-              Investment History
+              Investments
             </CardTitle>
-            <CardDescription>
-              All pools this investor has invested in
-            </CardDescription>
           </CardHeader>
           <CardContent>
             {investmentsLoading ? (
@@ -309,7 +287,6 @@ const InvestorDetailPage = () => {
                   <TableRow>
                     <TableHead>Pool Name</TableHead>
                     <TableHead>Investment Amount</TableHead>
-                    <TableHead>Investment %</TableHead>
                     <TableHead>Pool Status</TableHead>
                     <TableHead>Investment Date</TableHead>
                     <TableHead>Actions</TableHead>
@@ -319,37 +296,51 @@ const InvestorDetailPage = () => {
                   {investments.map((investment) => (
                     <TableRow key={investment.investment_id}>
                       <TableCell className="font-medium">
-                        <button
-                          onClick={() => navigate(`/pools/${investment.purchase_id}`)}
-                          className="text-blue-600 hover:text-blue-800 hover:underline cursor-pointer"
-                        >
-                          {investment.pool_name}
-                        </button>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => navigate(`/pools/${investment.purchase_id}`)}
+                            className="text-blue-600 hover:text-blue-800 hover:underline cursor-pointer"
+                          >
+                            {investment.pool_name}
+                          </button>
+                          <button
+                            onClick={() => navigate(`/pools/${investment.purchase_id}`)}
+                            className="text-blue-600 hover:text-blue-800 cursor-pointer p-1 rounded hover:bg-blue-50 transition-colors"
+                            title="View Pool Details"
+                          >
+                            <Eye className="h-4 w-4" />
+                          </button>
+                        </div>
                       </TableCell>
                       <TableCell className="font-semibold text-green-600">
-                        <button
-                          onClick={() => navigate(`/investment/${investment.investment_id}`)}
-                          className="text-green-600 hover:text-green-800 hover:underline cursor-pointer"
-                        >
-                          {formatCurrency(investment.investment_amount)}
-                        </button>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline">
-                          {investment.investment_percentage.toFixed(2)}%
-                        </Badge>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => navigate(`/investment/${investment.investment_id}`)}
+                            className="text-green-600 hover:text-green-800 hover:underline cursor-pointer"
+                          >
+                            {formatCurrency(investment.investment_amount)}
+                          </button>
+                          <button
+                            onClick={() => navigate(`/investment/${investment.investment_id}`)}
+                            className="text-green-600 hover:text-green-800 cursor-pointer p-1 rounded hover:bg-green-50 transition-colors"
+                            title="View Investment Details"
+                          >
+                            <Eye className="h-4 w-4" />
+                          </button>
+                        </div>
                       </TableCell>
                       <TableCell>
                         {getStatusBadge(investment.status)}
                       </TableCell>
                       <TableCell>
-                        {new Date(investment.created_at).toLocaleDateString()}
+                        {formatDate(investment.created_at)}
                       </TableCell>
                       <TableCell>
                         <Button
                           variant="outline"
                           size="sm"
                           onClick={() => handleViewAgreement(investment.agreement_url)}
+                          disabled={!investment.agreement_url}
                         >
                           <FileText className="h-4 w-4 mr-2" />
                           View Agreement
@@ -362,87 +353,6 @@ const InvestorDetailPage = () => {
             )}
           </CardContent>
         </Card>
-
-        {/* Agreement/Receipt Dialog */}
-        <Dialog open={isAgreementDialogOpen} onOpenChange={setIsAgreementDialogOpen}>
-          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <FileText className="h-5 w-5" />
-                Investment Agreement / Receipt
-              </DialogTitle>
-              <DialogDescription>
-                View the agreement document for this investment pool
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4">
-              {selectedAgreement ? (
-                <div className="w-full">
-                  <iframe
-                    src={selectedAgreement}
-                    className="w-full h-[600px] border rounded-lg"
-                    title="Agreement Document"
-                  />
-                  <div className="mt-4 flex justify-end gap-2">
-                    <Button
-                      variant="outline"
-                      onClick={() => window.open(selectedAgreement, '_blank')}
-                    >
-                      <ExternalLink className="h-4 w-4 mr-2" />
-                      Open in New Tab
-                    </Button>
-                    <Button
-                      variant="default"
-                      onClick={() => {
-                        // Handle download for both URLs and base64 data URLs
-                        if (selectedAgreement.startsWith('data:')) {
-                          // Base64 data URL
-                          const link = document.createElement('a');
-                          link.href = selectedAgreement;
-                          link.download = `agreement-${new Date().getTime()}.pdf`;
-                          document.body.appendChild(link);
-                          link.click();
-                          document.body.removeChild(link);
-                        } else {
-                          // Regular URL - fetch and download
-                          fetch(selectedAgreement)
-                            .then(response => response.blob())
-                            .then(blob => {
-                              const url = window.URL.createObjectURL(blob);
-                              const link = document.createElement('a');
-                              link.href = url;
-                              link.download = `agreement-${new Date().getTime()}.pdf`;
-                              document.body.appendChild(link);
-                              link.click();
-                              document.body.removeChild(link);
-                              window.URL.revokeObjectURL(url);
-                            })
-                            .catch(error => {
-                              console.error('Download error:', error);
-                              toast.error('Failed to download agreement', {
-                                description: 'Please try opening in a new tab instead'
-                              });
-                            });
-                        }
-                      }}
-                    >
-                      <Download className="h-4 w-4 mr-2" />
-                      Download Agreement
-                    </Button>
-                  </div>
-                </div>
-              ) : (
-                <div className="text-center py-12">
-                  <FileText className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                  <h3 className="text-lg font-semibold mb-2">Agreement not available</h3>
-                  <p className="text-muted-foreground">
-                    No agreement/receipt has been uploaded for this pool yet.
-                  </p>
-                </div>
-              )}
-            </div>
-          </DialogContent>
-        </Dialog>
       </div>
     </PageLayout>
   );

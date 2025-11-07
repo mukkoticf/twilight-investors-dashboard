@@ -9,11 +9,13 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ArrowLeft, Edit, Building, Car, DollarSign, Shield, Users, TrendingUp, Calendar } from 'lucide-react';
+import { ArrowLeft, Edit, Building, Car, DollarSign, Shield, Users, TrendingUp, Calendar, Eye, Plus, CheckCircle, XCircle, Clock } from 'lucide-react';
 import { usePageMetadata } from '@/hooks/use-page-metadata';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
+import { DatePicker } from '@/components/ui/date-picker';
+import { formatDate } from '@/utils/crm-operations';
 
 interface CompanyPool {
   purchase_id: string;
@@ -47,6 +49,30 @@ interface InvestorInvestment {
   phone: string;
 }
 
+interface QuarterlyROI {
+  declaration_id: string;
+  quarter_year: string;
+  roi_percentage: number;
+  declaration_date: string;
+  purchase_id: string;
+  is_finalized: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+interface Payment {
+  payment_id: string;
+  investor_id: string;
+  declaration_id: string;
+  gross_roi_amount: number;
+  emergency_fund_deduction: number;
+  tds_deduction: number;
+  net_payable_amount: number;
+  payment_status: 'Pending' | 'Paid' | 'Failed';
+  payment_date: string | null;
+  investor_name: string;
+}
+
 const PoolDetailsPage = () => {
   const { poolId } = useParams<{ poolId: string }>();
   const navigate = useNavigate();
@@ -72,6 +98,24 @@ const PoolDetailsPage = () => {
     status: 'Active' as 'Active' | 'Inactive' | 'Sold'
   });
 
+  // ROI Declaration Form State
+  const [isRoiDialogOpen, setIsRoiDialogOpen] = useState(false);
+  const [roiFormData, setRoiFormData] = useState({
+    quarter_year: '',
+    roi_percentage: '',
+    deduct_emergency_fund: false,
+    emergency_fund_amount: '',
+    is_finalized: false
+  });
+  const [declarationDate, setDeclarationDate] = useState<Date | undefined>(undefined);
+  const [selectedPoolEmergencyFund, setSelectedPoolEmergencyFund] = useState<number | null>(null);
+  
+  // ROI Declarations List State
+  const [roiDeclarations, setRoiDeclarations] = useState<QuarterlyROI[]>([]);
+  const [payments, setPayments] = useState<Payment[]>([]);
+  const [roiLoading, setRoiLoading] = useState(true);
+  const [paymentGeneratedStates, setPaymentGeneratedStates] = useState<{[key: string]: boolean}>({});
+
   usePageMetadata({
     defaultTitle: pool ? `${pool.pool_name} - Pool Details` : "Pool Details - Investor Management",
     defaultDescription: "View detailed information about company pool and investor investments"
@@ -81,13 +125,22 @@ const PoolDetailsPage = () => {
     if (poolId) {
       fetchPoolDetails();
       fetchInvestorInvestments();
+      fetchRoiDeclarations();
     }
   }, [poolId]);
+
+  // Fetch emergency fund remaining when pool is loaded
+  useEffect(() => {
+    if (pool?.purchase_id) {
+      setSelectedPoolEmergencyFund(pool.emergency_fund_remaining || 0);
+    }
+  }, [pool?.purchase_id, pool?.emergency_fund_remaining]);
 
   const fetchPoolDetails = async () => {
     try {
       setLoading(true);
       
+      // Fetch pool data including emergency_fund_remaining (same as QuarterlyRoiPage)
       const { data: poolData, error: poolError } = await (supabase as any)
         .from('company_pools')
         .select('*')
@@ -95,6 +148,11 @@ const PoolDetailsPage = () => {
         .single();
 
       if (poolError) throw poolError;
+
+      // Ensure emergency_fund_remaining is properly set (default to 0 if null)
+      if (poolData) {
+        poolData.emergency_fund_remaining = poolData.emergency_fund_remaining ?? 0;
+      }
 
       setPool(poolData);
     } catch (error) {
@@ -149,10 +207,58 @@ const PoolDetailsPage = () => {
     }
   };
 
+  const fetchRoiDeclarations = async () => {
+    try {
+      setRoiLoading(true);
+      
+      if (!poolId) return;
+
+      // Fetch ROI declarations for this specific pool
+      const { data: roiData, error: roiError } = await (supabase as any)
+        .from('quarterly_roi_declarations')
+        .select('*')
+        .eq('purchase_id', poolId)
+        .order('declaration_date', { ascending: false });
+
+      if (roiError) throw roiError;
+
+      setRoiDeclarations(roiData || []);
+
+      // Fetch payments with investor names
+      const { data: paymentData, error: paymentError } = await (supabase as any)
+        .from('investor_quarterly_payments')
+        .select(`
+          *,
+          investors!inner(investor_name)
+        `);
+
+      if (paymentError) throw paymentError;
+
+      setPayments(paymentData?.map((p: any) => ({
+        ...p,
+        investor_name: p.investors?.investor_name || 'Unknown'
+      })) || []);
+
+      // Check which declarations already have payments generated
+      const paymentStates: {[key: string]: boolean} = {};
+      (roiData || []).forEach((declaration: any) => {
+        const hasPayments = paymentData?.some((payment: any) => 
+          payment.declaration_id === declaration.declaration_id
+        );
+        paymentStates[declaration.declaration_id] = hasPayments || false;
+      });
+      setPaymentGeneratedStates(paymentStates);
+    } catch (error) {
+      console.error('Error fetching ROI declarations:', error);
+      toast.error('Failed to fetch ROI declarations');
+    } finally {
+      setRoiLoading(false);
+    }
+  };
+
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
+    return '₹' + new Intl.NumberFormat('en-IN', {
+      style: 'decimal',
       maximumFractionDigits: 0
     }).format(amount);
   };
@@ -240,6 +346,145 @@ const PoolDetailsPage = () => {
     }));
   };
 
+  const handleRoiSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!pool?.purchase_id) {
+      toast.error('Pool ID is missing. Cannot declare ROI.');
+      return;
+    }
+
+    // Validate emergency fund amount if deduction is enabled
+    if (roiFormData.deduct_emergency_fund) {
+      const amount = parseFloat(roiFormData.emergency_fund_amount);
+      if (!amount || amount <= 0) {
+        toast.error('Please enter a valid emergency fund amount');
+        return;
+      }
+      if (selectedPoolEmergencyFund !== null && amount > selectedPoolEmergencyFund) {
+        toast.error(`Emergency fund amount cannot exceed remaining amount: ${formatCurrency(selectedPoolEmergencyFund)}`);
+        return;
+      }
+    }
+    
+    try {
+      // Format date as YYYY-MM-DD for database
+      const formattedDate = declarationDate ? declarationDate.toISOString().split('T')[0] : '';
+      
+      if (!formattedDate) {
+        toast.error('Please select a declaration date');
+        return;
+      }
+
+      if (!roiFormData.quarter_year || !/Q[1-4]-20\d{2}/.test(roiFormData.quarter_year)) {
+        toast.error('Please enter Quarter & Year in the format Q1-20XX');
+        return;
+      }
+
+      if (!roiFormData.roi_percentage || parseFloat(roiFormData.roi_percentage) <= 0) {
+        toast.error('Please enter a valid ROI Percentage');
+        return;
+      }
+
+      const roiData = {
+        quarter_year: roiFormData.quarter_year,
+        roi_percentage: parseFloat(roiFormData.roi_percentage),
+        declaration_date: formattedDate,
+        purchase_id: pool.purchase_id, // Use current pool's purchase_id
+        is_finalized: true, // Always finalize when submitting
+        emergency_fund_deduction_amount: roiFormData.deduct_emergency_fund 
+          ? parseFloat(roiFormData.emergency_fund_amount) 
+          : null
+      };
+
+      const { data, error } = await (supabase as any)
+        .from('quarterly_roi_declarations')
+        .insert([roiData])
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      // Always generate payments automatically
+      const { data: paymentResult, error: paymentError } = await (supabase as any).rpc('generate_quarterly_payments', {
+        p_declaration_id: data.declaration_id
+      });
+
+      if (paymentError) {
+        console.error('Error generating payments:', paymentError);
+        toast.error(`Failed to generate payments: ${paymentError.message}`);
+      } else {
+        toast.success(`ROI declared and ${paymentResult} payments generated successfully`);
+      }
+
+      setIsRoiDialogOpen(false);
+      resetRoiForm();
+      fetchPoolDetails(); // Refresh pool data to update emergency fund remaining
+      fetchRoiDeclarations(); // Refresh ROI declarations list
+    } catch (error: any) {
+      console.error('Error saving ROI declaration:', error);
+      toast.error(`Failed to save ROI declaration: ${error.message || 'Unknown error'}`);
+    }
+  };
+
+  const handleViewPayments = (declaration: QuarterlyROI) => {
+    navigate(`/payments/${declaration.declaration_id}`);
+  };
+
+  const handleGeneratePayments = async (declaration: QuarterlyROI) => {
+    try {
+      // If the declaration is not yet finalized, finalize it first
+      if (!declaration.is_finalized) {
+        const { error: finalizeError } = await (supabase as any)
+          .from('quarterly_roi_declarations')
+          .update({ is_finalized: true })
+          .eq('declaration_id', declaration.declaration_id);
+
+        if (finalizeError) throw finalizeError;
+      }
+      
+      const { data: paymentResult, error: paymentError } = await (supabase as any).rpc('generate_quarterly_payments', {
+        p_declaration_id: declaration.declaration_id
+      });
+
+      if (paymentError) {
+        console.error('Error generating payments:', paymentError);
+        toast.error(`Failed to generate payments: ${paymentError.message}`);
+      } else {
+        toast.success(`${paymentResult} payments generated successfully`);
+        
+        // Update the payment generated state
+        setPaymentGeneratedStates(prev => ({
+          ...prev,
+          [declaration.declaration_id]: true
+        }));
+        
+        fetchRoiDeclarations(); // Refresh the data
+      }
+    } catch (error) {
+      console.error('Error generating payments:', error);
+      toast.error('Failed to generate payments');
+    }
+  };
+
+  const getRoiStatusBadge = (declaration: QuarterlyROI) => {
+    if (paymentGeneratedStates[declaration.declaration_id]) {
+      return <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300">Completed</Badge>;
+    }
+    return <Badge className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300">Pending</Badge>;
+  };
+
+  const resetRoiForm = () => {
+    setRoiFormData({
+      quarter_year: '',
+      roi_percentage: '',
+      deduct_emergency_fund: false,
+      emergency_fund_amount: '',
+      is_finalized: false
+    });
+    setDeclarationDate(undefined);
+  };
+
   if (loading) {
     return (
       <PageLayout>
@@ -298,56 +543,44 @@ const PoolDetailsPage = () => {
         </div>
 
 
-        {/* Pool Information */}
+        {/* Pool Information - KPI Cards */}
+        <div className="flex gap-4">
+          <Card className="w-fit">
+            <CardContent className="p-3.5">
+              <div>
+                <p className="text-xs font-medium text-muted-foreground">Investment Amount</p>
+                <p className="text-lg font-semibold text-green-600">{formatCurrency(pool.investor_amount)}</p>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="w-fit">
+            <CardContent className="p-3.5">
+              <div>
+                <p className="text-xs font-medium text-muted-foreground">Emergency Fund</p>
+                <p className="text-lg font-semibold text-blue-600">
+                  {formatCurrency(pool.emergency_fund_remaining)} / {formatCurrency(pool.emergency_fund_investor_share)}
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Vehicle Numbers */}
         <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Building className="h-5 w-5" />
-              Pool Information
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Owner Names</TableHead>
-                    <TableHead>Vehicle Numbers</TableHead>
-                    <TableHead>Total Cost</TableHead> 
-                    <TableHead>Total Investment Amount</TableHead>
-                     <TableHead>Monthly EMI</TableHead> 
-                    <TableHead>Total Emergency Fund</TableHead> 
-                    <TableHead>Emergency Fund Remaining</TableHead> 
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  <TableRow>
-                    <TableCell>
-                      <div className="flex flex-wrap gap-2">
-                        {pool.owner_names.map((owner, index) => (
-                          <Badge key={index} variant="outline">
-                            {owner}
-                          </Badge>
-                        ))}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex flex-wrap gap-2">
-                        {pool.vehicle_numbers.map((vehicle, index) => (
-                          <Badge key={index} variant="secondary">
-                            {vehicle}
-                          </Badge>
-                        ))}
-                      </div>
-                    </TableCell>
-                    <TableCell className="font-semibold">{formatCurrency(pool.total_cost)}</TableCell>
-                    <TableCell className="font-semibold text-green-600">{formatCurrency(pool.investor_amount)}</TableCell>
-                    <TableCell className="font-semibold">{formatCurrency(pool.monthly_emi)}</TableCell> 
-                    <TableCell className="font-semibold text-blue-600">{formatCurrency(pool.emergency_fund_investor_share)}</TableCell>
-                    <TableCell className="font-semibold text-orange-600">{formatCurrency(pool.emergency_fund_remaining)}</TableCell>
-                  </TableRow>
-                </TableBody>
-              </Table>
+          <CardContent className="p-4">
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <Car className="h-4 w-4 text-blue-600" />
+                <p className="text-sm font-medium text-muted-foreground">Vehicle Numbers</p>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {pool.vehicle_numbers.map((vehicle, index) => (
+                  <Badge key={index} variant="outline" className="text-xs py-0.5 px-2 border-blue-200 text-blue-700 bg-blue-50">
+                    {vehicle}
+                  </Badge>
+                ))}
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -357,11 +590,8 @@ const PoolDetailsPage = () => {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Users className="h-5 w-5" />
-              Investor Investments
+              {isAdmin ? 'Investments' : 'Your Investments'}
             </CardTitle>
-            <CardDescription>
-              All investors who have invested in this pool
-            </CardDescription>
           </CardHeader>
           <CardContent>
             {investmentsLoading ? (
@@ -380,40 +610,45 @@ const PoolDetailsPage = () => {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Investor Name</TableHead>
-                    <TableHead>Investment Amount</TableHead>
-                    <TableHead>Investment %</TableHead>
-                    <TableHead>Phone</TableHead>
-                    <TableHead>Investment Date</TableHead>
+                    <TableHead className="text-center">Investor Name</TableHead>
+                    <TableHead className="text-center">Investment Amount</TableHead>
+                    <TableHead className="text-center">Phone</TableHead>
+                    <TableHead className="text-center">Investment Date</TableHead>
+                    <TableHead className="w-12 text-center"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {investorInvestments.map((investment) => (
                     <TableRow key={investment.investment_id}>
-                      <TableCell className="font-medium">
-                        <button
-                          onClick={() => navigate(`/investor/${investment.investor_id}`)}
-                          className="text-blue-600 hover:text-blue-800 hover:underline cursor-pointer"
-                        >
+                      <TableCell className="font-medium text-center">
+                        <div className="flex justify-center">
                           {investment.investor_name}
-                        </button>
+                        </div>
                       </TableCell>
-                      <TableCell className="font-semibold text-green-600">
-                        <button
-                          onClick={() => navigate(`/investment/${investment.investment_id}`)}
-                          className="text-green-600 hover:text-green-800 hover:underline cursor-pointer"
-                        >
-                          {formatCurrency(investment.investment_amount)}
-                        </button>
+                      <TableCell className="font-semibold text-green-600 text-center">
+                        <div className="flex justify-center">
+                          <button
+                            onClick={() => navigate(`/investment/${investment.investment_id}`)}
+                            className="text-green-600 hover:text-green-800 hover:underline cursor-pointer"
+                          >
+                            {formatCurrency(investment.investment_amount)}
+                          </button>
+                        </div>
                       </TableCell>
-                      <TableCell>
-                        <Badge variant="outline">
-                          {investment.investment_percentage.toFixed(2)}%
-                        </Badge>
+                      <TableCell className="text-center">{investment.phone}</TableCell>
+                      <TableCell className="text-center">
+                        {formatDate(investment.created_at)}
                       </TableCell>
-                      <TableCell>{investment.phone}</TableCell>
-                      <TableCell>
-                        {new Date(investment.created_at).toLocaleDateString()}
+                      <TableCell className="text-center">
+                        <div className="flex justify-center">
+                          <button
+                            onClick={() => navigate(`/investment/${investment.investment_id}`)}
+                            className="text-black dark:text-white hover:text-primary cursor-pointer p-1 rounded hover:bg-muted transition-colors font-semibold"
+                            title="View Investment Details"
+                          >
+                            <Eye className="h-4 w-4" />
+                          </button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -422,6 +657,219 @@ const PoolDetailsPage = () => {
             )}
           </CardContent>
         </Card>
+
+        {/* ROI Declaration Section - Only for Admins */}
+        {isAdmin && (
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle className="flex items-center gap-2">
+                  <TrendingUp className="h-5 w-5" />
+                  ROI Declarations ({roiDeclarations.length})
+                </CardTitle>
+                <Dialog open={isRoiDialogOpen} onOpenChange={setIsRoiDialogOpen}>
+                  <DialogTrigger asChild>
+                    <Button onClick={() => resetRoiForm()}>
+                      <Plus className="h-4 w-4 mr-2" />
+                      Declare ROI
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>Declare Quarterly ROI ({pool?.pool_name || 'Pool'})</DialogTitle>
+                    </DialogHeader>
+                    <form onSubmit={handleRoiSubmit} className="space-y-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <Label htmlFor="quarter_year">Quarter & Year</Label>
+                          <Input
+                            id="quarter_year"
+                            value={roiFormData.quarter_year}
+                            onChange={(e) => setRoiFormData({ ...roiFormData, quarter_year: e.target.value })}
+                            placeholder="Q1-2024"
+                            required
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="roi_percentage">ROI Percentage</Label>
+                          <Input
+                            id="roi_percentage"
+                            type="number"
+                            step="0.01"
+                            value={roiFormData.roi_percentage}
+                            onChange={(e) => setRoiFormData({ ...roiFormData, roi_percentage: e.target.value })}
+                            placeholder="6.00"
+                            required
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <Label htmlFor="declaration_date">Declaration Date</Label>
+                          <DatePicker
+                            date={declarationDate}
+                            setDate={setDeclarationDate}
+                            placeholderText="Select declaration date"
+                            className="w-full"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Emergency Fund Deduction Section */}
+                      {pool?.purchase_id && (
+                        <div className="space-y-4 p-4 border rounded-lg bg-muted/50">
+                          <div className="flex items-center space-x-2">
+                            <input
+                              type="checkbox"
+                              id="deduct_emergency_fund"
+                              checked={roiFormData.deduct_emergency_fund}
+                              onChange={(e) => setRoiFormData({ ...roiFormData, deduct_emergency_fund: e.target.checked, emergency_fund_amount: e.target.checked ? roiFormData.emergency_fund_amount : '' })}
+                              className="rounded"
+                            />
+                            <Label htmlFor="deduct_emergency_fund" className="font-semibold">
+                              Deduct Emergency Fund
+                            </Label>
+                          </div>
+                          
+                          {roiFormData.deduct_emergency_fund && (
+                            <div className="space-y-2 pl-6">
+                              {selectedPoolEmergencyFund !== null && (
+                                <p className="text-sm text-muted-foreground">
+                                  Remaining Emergency Fund: <span className="font-semibold text-primary">{formatCurrency(selectedPoolEmergencyFund)}</span>
+                                </p>
+                              )}
+                              <div>
+                                <Label htmlFor="emergency_fund_amount">Emergency Fund Amount (₹)</Label>
+                                <Input
+                                  id="emergency_fund_amount"
+                                  type="number"
+                                  step="0.01"
+                                  min="0"
+                                  max={selectedPoolEmergencyFund || undefined}
+                                  value={roiFormData.emergency_fund_amount}
+                                  onChange={(e) => {
+                                    const value = e.target.value;
+                                    if (selectedPoolEmergencyFund !== null && value) {
+                                      const numValue = parseFloat(value);
+                                      if (numValue > selectedPoolEmergencyFund) {
+                                        toast.error(`Amount cannot exceed remaining: ${formatCurrency(selectedPoolEmergencyFund)}`);
+                                        return;
+                                      }
+                                    }
+                                    setRoiFormData({ ...roiFormData, emergency_fund_amount: value });
+                                  }}
+                                  placeholder="Enter amount to deduct"
+                                  required={roiFormData.deduct_emergency_fund}
+                                />
+                                {roiFormData.emergency_fund_amount && selectedPoolEmergencyFund !== null && (
+                                  <p className="text-xs text-muted-foreground mt-1">
+                                    Will deduct {formatCurrency(parseFloat(roiFormData.emergency_fund_amount) || 0)} from remaining {formatCurrency(selectedPoolEmergencyFund)}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      <div className="flex justify-end space-x-2">
+                        <Button type="button" variant="outline" onClick={() => setIsRoiDialogOpen(false)}>
+                          Cancel
+                        </Button>
+                        <Button type="submit">
+                          Generate Payments
+                        </Button>
+                      </div>
+                    </form>
+                  </DialogContent>
+                </Dialog>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {roiLoading ? (
+                <div className="flex justify-center py-8">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
+                </div>
+              ) : roiDeclarations.length === 0 ? (
+                <div className="text-center py-8">
+                  <TrendingUp className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                  <h3 className="text-lg font-medium mb-2">No ROI declarations found</h3>
+                  <p className="text-muted-foreground mb-4">
+                    Get started by declaring your first quarterly ROI for this pool.
+                  </p>
+                  <Button onClick={() => setIsRoiDialogOpen(true)}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Declare ROI
+                  </Button>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Quarter</TableHead>
+                        <TableHead>ROI %</TableHead>
+                        <TableHead>Declaration Date</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {roiDeclarations.map((declaration) => (
+                        <TableRow key={declaration.declaration_id}>
+                          <TableCell className="font-medium">
+                            {declaration.quarter_year}
+                          </TableCell>
+                          <TableCell>
+                            <span className="font-medium text-primary">
+                              {declaration.roi_percentage}%
+                            </span>
+                          </TableCell>
+                          <TableCell>
+                            {formatDate(declaration.declaration_date)}
+                          </TableCell>
+                          <TableCell>
+                            {getRoiStatusBadge(declaration)}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center space-x-2">
+                              {paymentGeneratedStates[declaration.declaration_id] ? (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  disabled
+                                  className="bg-green-50 text-green-700 border-green-200"
+                                >
+                                  Payment Generated
+                                </Button>
+                              ) : (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleGeneratePayments(declaration)}
+                                >
+                                  Generate Payments
+                                </Button>
+                              )}
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleViewPayments(declaration)}
+                              >
+                                <Eye className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
         {/* Edit Pool Dialog */}
         <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>

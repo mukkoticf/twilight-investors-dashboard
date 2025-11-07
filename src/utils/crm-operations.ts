@@ -2,16 +2,19 @@ import { toast } from 'sonner';
 import { exportToCSV, exportToExcel, exportToPDF, importFromCSV } from './crm-data-operations';
 
 /**
- * Format date to localized string
+ * Format date to '15 Oct, 2025' format
  */
 export const formatDate = (date: Date | string): string => {
   if (!date) return '';
   const dateObj = typeof date === 'string' ? new Date(date) : date;
-  return dateObj.toLocaleDateString('fr-FR', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric'
-  });
+  if (isNaN(dateObj.getTime())) return '';
+  
+  const day = dateObj.getDate();
+  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const month = monthNames[dateObj.getMonth()];
+  const year = dateObj.getFullYear();
+  
+  return `${day} ${month}, ${year}`;
 };
 
 /**

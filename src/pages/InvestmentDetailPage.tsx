@@ -5,10 +5,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { ArrowLeft, DollarSign, TrendingUp, Calendar, Building, User } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Label } from '@/components/ui/label';
+import { ArrowLeft, DollarSign, TrendingUp, Calendar, Building, User, Eye } from 'lucide-react';
 import { usePageMetadata } from '@/hooks/use-page-metadata';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface InvestmentDetail {
   investment_id: string;
@@ -41,15 +44,18 @@ interface QuarterlyPayment {
   roi_percentage: number;
   declaration_date: string | null;
   pool_name: string;
+  receipt_url: string | null;
 }
 
 const InvestmentDetailPage = () => {
   const { investmentId } = useParams<{ investmentId: string }>();
   const navigate = useNavigate();
+  const { isAdmin } = useAuth();
   const [investment, setInvestment] = useState<InvestmentDetail | null>(null);
   const [quarterlyPayments, setQuarterlyPayments] = useState<QuarterlyPayment[]>([]);
   const [loading, setLoading] = useState(true);
   const [quarterlyLoading, setQuarterlyLoading] = useState(true);
+  // const [selectedPoolFilter, setSelectedPoolFilter] = useState<string>('');
 
   usePageMetadata({
     defaultTitle: investment ? `Investment Details - ${investment.investor_name}` : "Investment Details - Investor Management",
@@ -67,6 +73,13 @@ const InvestmentDetailPage = () => {
       fetchQuarterlyPayments();
     }
   }, [investment]);
+
+  // Set default pool filter when investment is loaded
+  // useEffect(() => {
+  //   if (investment?.pool_name) {
+  //     setSelectedPoolFilter(investment.pool_name);
+  //   }
+  // }, [investment?.pool_name]);
 
   const fetchInvestmentDetails = async () => {
     try {
@@ -183,6 +196,12 @@ const InvestmentDetailPage = () => {
     }).format(amount);
   };
 
+  const formatNumber = (amount: number) => {
+    return new Intl.NumberFormat('en-IN', {
+      maximumFractionDigits: 0
+    }).format(amount);
+  };
+
   const getStatusBadge = (status: string) => {
     const variants = {
       'Active': 'default',
@@ -197,10 +216,29 @@ const InvestmentDetailPage = () => {
     );
   };
 
-  const totalGrossRoi = quarterlyPayments.reduce((sum, payment) => sum + payment.gross_roi_amount, 0);
-  const totalEmergencyFundDeduction = quarterlyPayments.reduce((sum, payment) => sum + payment.emergency_fund_deduction, 0);
-  const totalTdsDeduction = quarterlyPayments.reduce((sum, payment) => sum + payment.tds_deduction, 0);
-  const totalNetPayable = quarterlyPayments.reduce((sum, payment) => sum + payment.net_payable_amount, 0);
+  // Filter payments to show only those for the current investment's pool
+  const filteredPayments = investment?.pool_name 
+    ? quarterlyPayments.filter(payment => payment.pool_name === investment.pool_name)
+    : [];
+
+  // Calculate totals only for the current pool's payments
+  const totalGrossRoi = filteredPayments.reduce((sum, payment) => sum + payment.gross_roi_amount, 0);
+  const totalEmergencyFundDeduction = filteredPayments.reduce((sum, payment) => sum + payment.emergency_fund_deduction, 0);
+  const totalTdsDeduction = filteredPayments.reduce((sum, payment) => sum + payment.tds_deduction, 0);
+  const totalNetPayable = filteredPayments.reduce((sum, payment) => sum + payment.net_payable_amount, 0);
+  
+  // Calculate total emergency fund deducted for the current pool
+  const totalEmergencyFundDeductedForPool = filteredPayments.reduce((sum, payment) => sum + payment.emergency_fund_deduction, 0);
+
+  // Calculate ROI percentage
+  const noOfQuartersTillNow = filteredPayments.length;
+  const calculateROIPercentage = () => {
+    if (!investment || noOfQuartersTillNow === 0) return 0;
+    const x = (totalGrossRoi / investment.investment_amount) * 100;
+    const roiPercentage = (x / noOfQuartersTillNow) * 4;
+    return roiPercentage;
+  };
+  const roiPercentage = calculateROIPercentage();
 
   if (loading) {
     return (
@@ -247,9 +285,11 @@ const InvestmentDetailPage = () => {
             </Button>
             <div>
               <h1 className="text-3xl font-bold">Investment Details</h1>
-              <p className="text-muted-foreground">
-                {investment.investor_name} - {investment.pool_name}
-              </p>
+              {isAdmin && (
+                <p className="text-muted-foreground">
+                  {investment.investor_name} - {investment.pool_name}
+                </p>
+              )}
             </div>
           </div>
         </div>
@@ -257,25 +297,26 @@ const InvestmentDetailPage = () => {
         {/* Investment Summary */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium">Investment Amount</CardTitle>
-              <DollarSign className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-green-600">{formatCurrency(investment.investment_amount)}</div>
-              <p className="text-xs text-muted-foreground">
-                {investment.investment_percentage.toFixed(2)}% of pool
-              </p>
+              
             </CardContent>
           </Card>
 
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Gross ROI</CardTitle>
-              <TrendingUp className="h-4 w-4 text-muted-foreground" />
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium">Total Payout & Avg.ROI</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-blue-600">{formatCurrency(totalGrossRoi)}</div>
+              <div className="text-2xl font-bold text-blue-600">
+                {formatNumber(totalGrossRoi)}
+                {roiPercentage > 0 && (
+                  <span>({roiPercentage.toFixed(2)}%)</span>
+                )}
+              </div>
               <p className="text-xs text-muted-foreground">
                 Before deductions
               </p>
@@ -283,14 +324,13 @@ const InvestmentDetailPage = () => {
           </Card>
 
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Net Payable</CardTitle>
-              <Building className="h-4 w-4 text-muted-foreground" />
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium">Emergency Fund Ded. until Now</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-green-600">{formatCurrency(totalNetPayable)}</div>
+              <div className="text-2xl font-bold text-orange-600">{formatCurrency(totalEmergencyFundDeductedForPool)}</div>
               <p className="text-xs text-muted-foreground">
-                After all deductions
+                It's parked in Fixed Deposit
               </p>
             </CardContent>
           </Card>
@@ -300,67 +340,104 @@ const InvestmentDetailPage = () => {
         {/* Quarterly Payments Breakdown */}
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Calendar className="h-5 w-5" />
-              Quarterly Payments Breakdown
-            </CardTitle>
-            <CardDescription>
-              Detailed quarterly payments and deductions for this investment
-            </CardDescription>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <Calendar className="h-5 w-5" />
+                  Quarterly Payouts
+                  {investment?.pool_name && (
+                    <Badge variant="outline" className="text-blue-600 text-base px-4 py-2 font-semibold">
+                      {investment.pool_name}
+                    </Badge>
+                  )}
+                </CardTitle>
+              </div>
+              {/* {uniquePools.length > 1 && (
+                <div className="flex items-center space-x-2">
+                  <Label htmlFor="pool-filter" className="text-sm font-medium">
+                    Filter by Pool:
+                  </Label>
+                  <Select value={selectedPoolFilter} onValueChange={setSelectedPoolFilter}>
+                    <SelectTrigger className="w-[180px]">
+                      <SelectValue placeholder="Select a pool" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {uniquePools.map((pool) => (
+                        <SelectItem key={pool} value={pool}>
+                          {pool}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )} */}
+            </div>
           </CardHeader>
           <CardContent>
             {quarterlyLoading ? (
               <div className="flex justify-center py-8">
                 <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
               </div>
-            ) : quarterlyPayments.length === 0 ? (
+            ) : filteredPayments.length === 0 ? (
               <div className="text-center py-8">
                 <Calendar className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
                 <h3 className="text-lg font-semibold mb-2">No quarterly payments found</h3>
                 <p className="text-muted-foreground">
-                  Quarterly payments for this investment are not available yet.
+                  Quarterly payments for this investment pool are not available yet.
                 </p>
               </div>
             ) : (
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Quarter</TableHead>
-                    <TableHead>ROI %</TableHead>
-                    <TableHead>Gross ROI Amount</TableHead>
-                    <TableHead>Emergency Fund Deduction</TableHead>
-                    <TableHead>TDS Deduction</TableHead>
-                    <TableHead>Net Payable Amount</TableHead>
-                    <TableHead>Pool</TableHead>
+                    <TableHead className="text-center">Quarter</TableHead>
+                    <TableHead className="text-center">ROI %</TableHead>
+                    <TableHead className="text-center">Payout</TableHead>
+                    <TableHead className="text-center">Emergency Fund Ded.</TableHead>
+                    <TableHead className="text-center">TDS Ded.</TableHead>
+                    <TableHead className="text-center">Net Payable Amount</TableHead>
+                    <TableHead className="text-center">Receipt</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {quarterlyPayments.map((payment) => (
+                  {filteredPayments.map((payment) => (
                     <TableRow key={payment.payment_id}>
-                      <TableCell className="font-medium">
+                      <TableCell className="font-medium text-center">
                         {payment.quarter} {payment.year}
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="text-center">
                         <Badge variant="outline" className="text-purple-600">
                           {payment.roi_percentage.toFixed(2)}%
                         </Badge>
                       </TableCell>
-                      <TableCell className="font-semibold text-blue-600">
+                      <TableCell className="font-semibold text-blue-600 text-center">
                         {formatCurrency(payment.gross_roi_amount)}
                       </TableCell>
-                      <TableCell className="font-semibold text-orange-600">
+                      <TableCell className="font-semibold text-orange-600 text-center">
                         {formatCurrency(payment.emergency_fund_deduction)}
                       </TableCell>
-                      <TableCell className="font-semibold text-red-600">
+                      <TableCell className="font-semibold text-red-600 text-center">
                         {formatCurrency(payment.tds_deduction)}
                       </TableCell>
-                      <TableCell className="font-semibold text-green-600">
+                      <TableCell className="font-semibold text-green-600 text-center">
                         {formatCurrency(payment.net_payable_amount)}
                       </TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className="text-blue-600">
-                          {payment.pool_name}
-                        </Badge>
+                      <TableCell className="text-center">
+                        {payment.receipt_url ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              const encodedUrl = encodeURIComponent(payment.receipt_url!);
+                              window.open(`/receipt?url=${encodedUrl}`, '_blank');
+                            }}
+                          >
+                            <Eye className="h-4 w-4 mr-2" />
+                            View
+                          </Button>
+                        ) : (
+                          <span className="text-muted-foreground text-sm">-</span>
+                        )}
                       </TableCell>
                     </TableRow>
                   ))}
@@ -375,3 +452,4 @@ const InvestmentDetailPage = () => {
 };
 
 export default InvestmentDetailPage;
+

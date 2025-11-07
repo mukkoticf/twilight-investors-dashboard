@@ -8,6 +8,7 @@ import { usePageMetadata } from "@/hooks/use-page-metadata";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { formatDate } from '@/utils/crm-operations';
 
 interface VehiclePurchase {
   id: number;
@@ -145,7 +146,7 @@ const VehiclePurPage = () => {
                 {purchases.map((purchase) => (
                   <TableRow key={purchase.id}>
                     <TableCell className="font-medium">{purchase.vehicleType}</TableCell>
-                    <TableCell>{new Date(purchase.purchaseDate).toLocaleDateString()}</TableCell>
+                    <TableCell>{formatDate(purchase.purchaseDate)}</TableCell>
                     <TableCell>${purchase.amount.toLocaleString()}</TableCell>
                     <TableCell>{purchase.vendor}</TableCell>
                     <TableCell className="text-right">

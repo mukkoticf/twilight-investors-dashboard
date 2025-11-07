@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { TrendingUp, Loader2 } from 'lucide-react';
+import { Bus, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 const LoginPage = () => {
@@ -14,15 +14,21 @@ const LoginPage = () => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const { signIn, user, loading: authLoading } = useAuth();
+  const { signIn, user, investor, isAdmin, loading: authLoading } = useAuth();
   const navigate = useNavigate();
 
   // Redirect if already logged in
   useEffect(() => {
     if (!authLoading && user) {
-      navigate('/');
+      // If investor data is available and user is not admin, redirect to investor page
+      if (investor && !isAdmin) {
+        navigate(`/investor/${investor.investor_id}`);
+      } else if (!investor || isAdmin) {
+        // Admin or no investor data yet - go to dashboard
+        navigate('/');
+      }
     }
-  }, [user, authLoading, navigate]);
+  }, [user, investor, isAdmin, authLoading, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -41,7 +47,7 @@ const LoginPage = () => {
         toast.success('Login successful', {
           description: 'Welcome back!',
         });
-        navigate('/');
+        // Redirect will be handled by useEffect when investor data loads
       }
     } catch (err: any) {
       setError(err.message || 'An unexpected error occurred');
@@ -62,18 +68,27 @@ const LoginPage = () => {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 px-4">
-      <Card className="w-full max-w-md">
+    <div className="min-h-screen flex items-center justify-center px-4 relative overflow-hidden">
+      {/* Blurred Background Image */}
+      <div 
+        className="absolute inset-0 bg-cover bg-center"
+        style={{
+          backgroundImage: 'url(/Twbus.jpg)',
+          filter: 'blur(4px)',
+          transform: 'scale(1.1)'
+        }}
+      />
+      <div className="absolute inset-0 bg-black/30" />
+      
+      {/* Login Card */}
+      <Card className="w-full max-w-md relative z-10 bg-white/95 backdrop-blur-sm">
         <CardHeader className="space-y-1 text-center">
           <div className="flex justify-center mb-4">
             <div className="p-3 bg-primary/10 rounded-lg">
-              <TrendingUp className="h-8 w-8 text-primary" />
+              <Bus className="h-8 w-8 text-primary" />
             </div>
           </div>
-          <CardTitle className="text-2xl font-bold">Investor Dashboard</CardTitle>
-          <CardDescription>
-            Sign in to access your investment data
-          </CardDescription>
+          <CardTitle className="text-2xl font-bold">Sign in to Twilight Investments</CardTitle>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -84,11 +99,11 @@ const LoginPage = () => {
             )}
             
             <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="email">Email address</Label>
               <Input
                 id="email"
                 type="email"
-                placeholder="you@example.com"
+                placeholder="Your email address"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
@@ -98,11 +113,11 @@ const LoginPage = () => {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
+              <Label htmlFor="password">Your Password</Label>
               <Input
                 id="password"
                 type="password"
-                placeholder="Enter your password"
+                placeholder="Your password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required

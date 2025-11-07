@@ -10,6 +10,8 @@ import ReportsPage from "./pages/ReportsPage";
 import PoolDetailsPage from "./pages/PoolDetailsPage";
 import InvestorDetailPage from "./pages/InvestorDetailPage";
 import InvestmentDetailPage from "./pages/InvestmentDetailPage";
+import PaymentDetailsPage from "./pages/PaymentDetailsPage";
+import ReceiptViewerPage from "./pages/ReceiptViewerPage";
 import NotFound from "./pages/NotFound";
 import { useEffect } from "react";
 import { CRMProvider } from "./contexts/CRMContext";
@@ -74,6 +76,22 @@ const routes = [
     element: (
       <ProtectedRoute>
         <InvestmentDetailPage />
+      </ProtectedRoute>
+    ) 
+  },
+  { 
+    path: "/payments/:declarationId", 
+    element: (
+      <ProtectedRoute requireAdmin={true}>
+        <PaymentDetailsPage />
+      </ProtectedRoute>
+    ) 
+  },
+  { 
+    path: "/receipt", 
+    element: (
+      <ProtectedRoute>
+        <ReceiptViewerPage />
       </ProtectedRoute>
     ) 
   },

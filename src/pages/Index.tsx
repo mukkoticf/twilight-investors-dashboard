@@ -66,8 +66,13 @@ const Index = () => {
   });
 
   useEffect(() => {
+    // Redirect investors to their detail page
+    if (investor && !isAdmin) {
+      navigate(`/investor/${investor.investor_id}`);
+      return;
+    }
     fetchPools();
-  }, [user, investor, isAdmin]);
+  }, [user, investor, isAdmin, navigate]);
 
   const fetchPools = async () => {
     try {
@@ -257,45 +262,30 @@ const Index = () => {
         </div>
 
         {/* Summary Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">Total Investment</p>
-                  <p className="text-2xl font-bold">{formatCurrency(totalInvestment)}</p>
-                </div>
-                <div className="bg-primary/10 p-3 rounded-lg">
-                  <DollarSign className="h-6 w-6 text-primary" />
-                </div>
+        <div className="flex gap-4 flex-wrap">
+          <Card className="min-w-fit flex-1 max-w-fit">
+            <CardContent className="p-4">
+              <div>
+                <p className="text-xs font-medium text-muted-foreground">Total Investment</p>
+                <p className="text-xl font-bold text-black dark:text-white">{formatCurrency(totalInvestment)}</p>
               </div>
             </CardContent>
           </Card>
 
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">Active Pools</p>
-                  <p className="text-2xl font-bold">{activePools}</p>
-                </div>
-                <div className="bg-primary/10 p-3 rounded-lg">
-                  <Building className="h-6 w-6 text-primary" />
-                </div>
+          <Card className="w-fit">
+            <CardContent className="p-4">
+              <div>
+                <p className="text-xs font-medium text-muted-foreground">Active Pools</p>
+                <p className="text-xl font-bold text-black dark:text-white">{activePools}</p>
               </div>
             </CardContent>
           </Card>
 
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">Total Vehicles</p>
-                  <p className="text-2xl font-bold">{totalVehicles}</p>
-                </div>
-                <div className="bg-primary/10 p-3 rounded-lg">
-                  <Car className="h-6 w-6 text-primary" />
-                </div>
+          <Card className="w-fit">
+            <CardContent className="p-4">
+              <div>
+                <p className="text-xs font-medium text-muted-foreground">Total Vehicles</p>
+                <p className="text-xl font-bold text-black dark:text-white">{totalVehicles}</p>
               </div>
             </CardContent>
           </Card>
@@ -370,16 +360,18 @@ const Index = () => {
                 </CardHeader>
                 <CardContent className="space-y-4">
                   {/* Owners */}
-                  <div>
-                    <Label className="text-sm font-medium text-muted-foreground">Owners</Label>
-                    <div className="flex flex-wrap gap-1 mt-1">
-                      {pool.owner_names.map((owner, index) => (
-                        <Badge key={index} variant="outline" className="text-xs">
-                          {owner}
-                        </Badge>
-                      ))}
+                  {!isAdmin && (
+                    <div>
+                      <Label className="text-sm font-medium text-muted-foreground">Owners</Label>
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {pool.owner_names.map((owner, index) => (
+                          <Badge key={index} variant="outline" className="text-xs">
+                            {owner}
+                          </Badge>
+                        ))}
+                      </div>
                     </div>
-                  </div>
+                  )}
 
                   {/* Vehicles */}
                   <div>

@@ -13,6 +13,7 @@ import { usePageMetadata } from '@/hooks/use-page-metadata';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { DatePicker } from '@/components/ui/date-picker';
+import { formatDate } from '@/utils/crm-operations';
 
 interface QuarterlyROI {
   declaration_id: string;
@@ -588,7 +589,7 @@ const QuarterlyRoiPage = () => {
                         </span>
                           </TableCell>
                           <TableCell>
-                            {new Date(declaration.declaration_date).toLocaleDateString()}
+                            {formatDate(declaration.declaration_date)}
                           </TableCell>
                           <TableCell>
                             <div>
@@ -649,7 +650,7 @@ const QuarterlyRoiPage = () => {
               </DialogTitle>
               <DialogDescription>
                 ROI: {selectedDeclaration?.roi_percentage}% | 
-                Declaration Date: {selectedDeclaration && new Date(selectedDeclaration.declaration_date).toLocaleDateString()}
+                Declaration Date: {selectedDeclaration && formatDate(selectedDeclaration.declaration_date)}
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
