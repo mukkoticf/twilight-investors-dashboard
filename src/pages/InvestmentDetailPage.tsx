@@ -12,6 +12,7 @@ import { usePageMetadata } from '@/hooks/use-page-metadata';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
+import { trackPageViewToDB } from '@/utils/analytics';
 
 interface InvestmentDetail {
   investment_id: string;
@@ -44,13 +45,14 @@ interface QuarterlyPayment {
   roi_percentage: number;
   declaration_date: string | null;
   pool_name: string;
+  company_name: string | null;
   receipt_url: string | null;
 }
 
 const InvestmentDetailPage = () => {
   const { investmentId } = useParams<{ investmentId: string }>();
   const navigate = useNavigate();
-  const { isAdmin } = useAuth();
+  const { investor, isAdmin } = useAuth();
   const [investment, setInvestment] = useState<InvestmentDetail | null>(null);
   const [quarterlyPayments, setQuarterlyPayments] = useState<QuarterlyPayment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -61,6 +63,13 @@ const InvestmentDetailPage = () => {
     defaultTitle: investment ? `Investment Details - ${investment.investor_name}` : "Investment Details - Investor Management",
     defaultDescription: "View detailed quarterly breakdown of investment"
   });
+
+  // Track page view for investors (not admins)
+  useEffect(() => {
+    if (investor && !isAdmin) {
+      trackPageViewToDB(investor.investor_id, investor.investor_name, 'Investment Details');
+    }
+  }, [investor, isAdmin]);
 
   useEffect(() => {
     if (investmentId) {
@@ -174,7 +183,8 @@ const InvestmentDetailPage = () => {
           quarter_year: quarterYear,
           roi_percentage: payment.quarterly_roi_declarations?.roi_percentage || 0,
           declaration_date: payment.quarterly_roi_declarations?.declaration_date || null,
-          pool_name: payment.quarterly_roi_declarations?.company_pools?.pool_name || 'Unknown Pool'
+          pool_name: payment.quarterly_roi_declarations?.company_pools?.pool_name || 'Unknown Pool',
+          company_name: payment.company_name || null
         };
       }) || [];
 
@@ -223,7 +233,6 @@ const InvestmentDetailPage = () => {
 
   // Calculate totals only for the current pool's payments
   const totalGrossRoi = filteredPayments.reduce((sum, payment) => sum + payment.gross_roi_amount, 0);
-  const totalEmergencyFundDeduction = filteredPayments.reduce((sum, payment) => sum + payment.emergency_fund_deduction, 0);
   const totalTdsDeduction = filteredPayments.reduce((sum, payment) => sum + payment.tds_deduction, 0);
   const totalNetPayable = filteredPayments.reduce((sum, payment) => sum + payment.net_payable_amount, 0);
   
@@ -391,6 +400,7 @@ const InvestmentDetailPage = () => {
                 <TableHeader>
                   <TableRow>
                     <TableHead className="text-center">Quarter</TableHead>
+                    <TableHead className="text-center">Company</TableHead>
                     <TableHead className="text-center">ROI %</TableHead>
                     <TableHead className="text-center">Payout</TableHead>
                     <TableHead className="text-center">Emergency Fund Ded.</TableHead>
@@ -404,6 +414,15 @@ const InvestmentDetailPage = () => {
                     <TableRow key={payment.payment_id}>
                       <TableCell className="font-medium text-center">
                         {payment.quarter} {payment.year}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        {payment.company_name ? (
+                          <Badge variant="secondary" className="text-sm">
+                            {payment.company_name}
+                          </Badge>
+                        ) : (
+                          <span className="text-muted-foreground text-sm">-</span>
+                        )}
                       </TableCell>
                       <TableCell className="text-center">
                         <Badge variant="outline" className="text-purple-600">

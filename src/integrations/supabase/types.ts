@@ -102,6 +102,29 @@ export type Database = {
           updated_at?: string
         }
       }
+      companies: {
+        Row: {
+          company_name: string
+          description: string | null
+          is_active: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          company_name: string
+          description?: string | null
+          is_active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          company_name?: string
+          description?: string | null
+          is_active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+      }
       investor_investments: {
         Row: {
           investment_id: string
@@ -109,6 +132,7 @@ export type Database = {
           purchase_id: string
           investment_amount: number
           investment_percentage: number
+          company_name: string | null
           created_at: string
           updated_at: string
         }
@@ -118,6 +142,7 @@ export type Database = {
           purchase_id: string
           investment_amount: number
           investment_percentage: number
+          company_name?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -127,6 +152,7 @@ export type Database = {
           purchase_id?: string
           investment_amount?: number
           investment_percentage?: number
+          company_name?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -174,6 +200,8 @@ export type Database = {
           net_payable_amount: number
           payment_status: 'Pending' | 'Paid' | 'Failed'
           payment_date: string | null
+          company_name: string | null
+          receipt_url: string | null
           created_at: string
           updated_at: string
         }
@@ -187,6 +215,8 @@ export type Database = {
           net_payable_amount: number
           payment_status?: 'Pending' | 'Paid' | 'Failed'
           payment_date?: string | null
+          company_name?: string | null
+          receipt_url?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -200,8 +230,30 @@ export type Database = {
           net_payable_amount?: number
           payment_status?: 'Pending' | 'Paid' | 'Failed'
           payment_date?: string | null
+          company_name?: string | null
+          receipt_url?: string | null
           created_at?: string
           updated_at?: string
+        }
+      }
+      page_views: {
+        Row: {
+          investor_name: string
+          page_name: string
+          viewed_at: string
+          created_at: string
+        }
+        Insert: {
+          investor_name: string
+          page_name: string
+          viewed_at?: string
+          created_at?: string
+        }
+        Update: {
+          investor_name?: string
+          page_name?: string
+          viewed_at?: string
+          created_at?: string
         }
       }
     }

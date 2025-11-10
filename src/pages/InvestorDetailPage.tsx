@@ -10,6 +10,8 @@ import { usePageMetadata } from '@/hooks/use-page-metadata';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { formatDate } from '@/utils/crm-operations';
+import { useAuth } from '@/contexts/AuthContext';
+import { trackPageViewToDB } from '@/utils/analytics';
 
 interface Investor {
   investor_id: string;
@@ -36,6 +38,7 @@ interface InvestorInvestment {
 const InvestorDetailPage = () => {
   const { investorId } = useParams<{ investorId: string }>();
   const navigate = useNavigate();
+  const { investor: authInvestor, isAdmin } = useAuth();
   const [investor, setInvestor] = useState<Investor | null>(null);
   const [investments, setInvestments] = useState<InvestorInvestment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -45,6 +48,13 @@ const InvestorDetailPage = () => {
     defaultTitle: investor ? `${investor.investor_name} - Investor Details` : "Investor Details - Investor Management",
     defaultDescription: "View detailed information about investor and their investments"
   });
+
+  // Track page view for investors (not admins) - this is the "Investments" page
+  useEffect(() => {
+    if (authInvestor && !isAdmin && investorId === authInvestor.investor_id) {
+      trackPageViewToDB(authInvestor.investor_id, authInvestor.investor_name, 'Investments');
+    }
+  }, [authInvestor, isAdmin, investorId]);
 
   useEffect(() => {
     if (investorId) {

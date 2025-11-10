@@ -1,4 +1,5 @@
 import { debounce } from './crm-operations';
+import { supabase } from '@/integrations/supabase/client';
 
 type EventCategory = 'ui' | 'data' | 'user' | 'finance' | 'parcels' | 'crops' | 'inventory';
 type EventAction = 'view' | 'click' | 'create' | 'update' | 'delete' | 'export' | 'import' | 'search' | 'filter';
@@ -114,6 +115,34 @@ initAnalytics();
 // Export a page view tracker
 export const trackPageView = (pageName: string, data?: EventData): void => {
   trackEvent('ui', 'view', pageName, undefined, data);
+};
+
+// Track page view to Supabase (only for investors, not admins)
+export const trackPageViewToDB = async (
+  investorId: string | null,
+  investorName: string | null,
+  pageName: string
+): Promise<void> => {
+  // Only track if we have investor information (not admin)
+  if (!investorName) {
+    return;
+  }
+
+  try {
+    const { error } = await supabase
+      .from('page_views')
+      .insert({
+        investor_name: investorName,
+        page_name: pageName,
+        viewed_at: new Date().toISOString()
+      });
+
+    if (error) {
+      console.error('Error tracking page view:', error);
+    }
+  } catch (error) {
+    console.error('Failed to track page view to database:', error);
+  }
 };
 
 // Export a UI interaction tracker

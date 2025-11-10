@@ -13,6 +13,7 @@ import { usePageMetadata } from '@/hooks/use-page-metadata';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
+import { trackPageViewToDB } from '@/utils/analytics';
 
 interface CompanyPool {
   purchase_id: string;
@@ -66,8 +67,10 @@ const Index = () => {
   });
 
   useEffect(() => {
-    // Redirect investors to their detail page
+    // Track page view for investors (not admins)
     if (investor && !isAdmin) {
+      trackPageViewToDB(investor.investor_id, investor.investor_name, 'Investments');
+      // Redirect investors to their detail page
       navigate(`/investor/${investor.investor_id}`);
       return;
     }
