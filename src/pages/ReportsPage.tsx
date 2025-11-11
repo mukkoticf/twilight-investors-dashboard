@@ -63,6 +63,7 @@ interface PoolInvestment {
   pool_name: string;
   investment_amount: number;
   purchase_id: string;
+  investment_id?: string;
   agreement_url?: string | null;
 }
 
@@ -79,6 +80,7 @@ const ReportsPage = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedInvestor, setSelectedInvestor] = useState<InvestorReport | null>(null);
   const [selectedPoolFilter, setSelectedPoolFilter] = useState<string>('');
+  const [selectedInvestmentId, setSelectedInvestmentId] = useState<string | null>(null);
   const [availablePools, setAvailablePools] = useState<PoolInfo[]>([]);
   const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -169,6 +171,7 @@ const ReportsPage = () => {
             pool_name: inv.company_pools?.pool_name || 'Unknown Pool',
             investment_amount: inv.investment_amount || 0,
             purchase_id: inv.purchase_id,
+            investment_id: inv.investment_id,
             agreement_url: inv.agreement_url || null
           }));
           
@@ -278,10 +281,15 @@ const ReportsPage = () => {
         const poolId = payment.quarterly_roi_declarations?.purchase_id;
         const investmentAmount = investmentMap.get(poolId) || 0;
         
+        // Calculate ROI% from actual payout: (payout / investment) * 100
+        const calculatedRoiPercentage = investmentAmount > 0
+          ? (payment.gross_roi_amount / investmentAmount) * 100
+          : (payment.quarterly_roi_declarations?.roi_percentage || 0);
+        
         return {
           quarter_year: payment.quarterly_roi_declarations?.quarter_year || 'Unknown',
           pool_name: payment.company_pools?.pool_name || 'Unknown',
-          roi_percentage: payment.quarterly_roi_declarations?.roi_percentage || 0,
+          roi_percentage: calculatedRoiPercentage,
           investment_amount: investmentAmount,
           investment_percentage: payment.investment_percentage || 0,
           gross_roi_amount: payment.gross_roi_amount || 0,
@@ -361,8 +369,17 @@ const ReportsPage = () => {
     setSelectedInvestor(investor);
   };
 
-  const handleUploadAgreement = (investor: InvestorReportWithPools) => {
+  const handleUploadAgreement = (investor: InvestorReportWithPools, purchaseId?: string, investmentId?: string) => {
     setSelectedInvestorForUpload(investor);
+    // If purchaseId is provided, use it; otherwise use selectedPoolFilter
+    if (purchaseId) {
+      setSelectedPoolFilter(purchaseId);
+    }
+    if (investmentId) {
+      setSelectedInvestmentId(investmentId);
+    } else {
+      setSelectedInvestmentId(null);
+    }
     setIsUploadDialogOpen(true);
   };
 
@@ -445,12 +462,19 @@ const ReportsPage = () => {
         agreementUrl = await base64Promise;
       }
 
-      // Update investor_investments table with agreement URL for this specific investor + pool
-      const { error: updateError } = await (supabase as any)
+      // Update investor_investments table with agreement URL for this specific investment
+      let updateQuery = (supabase as any)
         .from('investor_investments')
         .update({ agreement_url: agreementUrl })
         .eq('investor_id', selectedInvestorForUpload.investor_id)
         .eq('purchase_id', selectedPoolFilter);
+      
+      // If a specific investment_id is provided, update only that investment
+      if (selectedInvestmentId) {
+        updateQuery = updateQuery.eq('investment_id', selectedInvestmentId);
+      }
+      
+      const { error: updateError } = await updateQuery;
 
       if (updateError) {
         // Check if agreement_url column exists
@@ -470,6 +494,7 @@ const ReportsPage = () => {
       setIsUploadDialogOpen(false);
       setUploading(false);
       setSelectedInvestorForUpload(null);
+      setSelectedInvestmentId(null);
 
       // Store filename for display
       setUploadedFileName(uploadFile.name);
@@ -567,79 +592,80 @@ const ReportsPage = () => {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredInvestors.map((investor) => {
-                      const investmentAmount = getInvestmentForSelectedPool(investor);
-                      return (
-                        <TableRow key={investor.investor_id}>
-                          <TableCell className="font-medium">{investor.investor_name}</TableCell>
-                          <TableCell>
-                            <div className="flex flex-wrap gap-1">
-                              {investor.pool_investments
-                                .filter(pi => {
-                                  const selectedPoolName = availablePools.find(p => p.purchase_id === selectedPoolFilter)?.pool_name;
-                                  return pi.pool_name === selectedPoolName;
-                                })
-                                .map((pi, index) => (
-                                  <Badge key={index} variant="outline" className="text-blue-600">
-                                    {pi.pool_name}
-                                  </Badge>
-                                ))
-                              }
-                            </div>
-                          </TableCell>
-                          <TableCell className="font-medium text-green-600">
-                            {formatCurrency(investmentAmount)}
-                          </TableCell>
-                          <TableCell>
-                            {(() => {
-                              // Find the specific investment for this investor in the selected pool
-                              const investment = investor.pool_investments.find(
-                                pi => pi.purchase_id === selectedPoolFilter
-                              );
-                              const hasAgreement = investment?.agreement_url && investment.agreement_url.trim() !== '';
-                              
-                              if (hasAgreement) {
-                                return (
-                                  <div className="flex items-center gap-2">
-                                    <Button 
-                                      variant="outline" 
-                                      size="sm"
-                                      onClick={() => {
-                                        setViewAgreementUrl(investment.agreement_url!);
-                                        setIsViewAgreementDialogOpen(true);
-                                      }}
-                                    >
-                                      <Eye className="h-4 w-4 mr-2" />
-                                      View Agreement
-                                    </Button>
-                                    <Button 
-                                      variant="ghost" 
-                                      size="sm"
-                                      className="h-8 w-8 p-0"
-                                      onClick={() => handleUploadAgreement(investor)}
-                                      title="Edit/Replace Agreement"
-                                    >
-                                      <Edit className="h-4 w-4" />
-                                    </Button>
-                                  </div>
-                                );
-                              } else {
-                                return (
+                    {(() => {
+                      // Flatten investments: create one row per investment instead of one per investor
+                      const investmentRows: Array<{
+                        investor: InvestorReportWithPools;
+                        investment: PoolInvestment;
+                        key: string;
+                      }> = [];
+                      
+                      filteredInvestors.forEach((investor) => {
+                        const selectedPoolName = availablePools.find(p => p.purchase_id === selectedPoolFilter)?.pool_name;
+                        investor.pool_investments
+                          .filter(pi => pi.pool_name === selectedPoolName)
+                          .forEach((investment) => {
+                            investmentRows.push({
+                              investor,
+                              investment,
+                              key: investment.investment_id || `${investor.investor_id}-${investment.purchase_id}-${investment.investment_amount}`
+                            });
+                          });
+                      });
+                      
+                      return investmentRows.map(({ investor, investment, key }) => {
+                        const hasAgreement = investment.agreement_url && investment.agreement_url.trim() !== '';
+                        
+                        return (
+                          <TableRow key={key}>
+                            <TableCell className="font-medium">{investor.investor_name}</TableCell>
+                            <TableCell>
+                              <Badge variant="outline" className="text-blue-600">
+                                {investment.pool_name}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="font-medium text-green-600">
+                              {formatCurrency(investment.investment_amount)}
+                            </TableCell>
+                            <TableCell>
+                              {hasAgreement ? (
+                                <div className="flex items-center gap-2">
                                   <Button 
                                     variant="outline" 
                                     size="sm"
-                                    onClick={() => handleUploadAgreement(investor)}
+                                    onClick={() => {
+                                      setViewAgreementUrl(investment.agreement_url!);
+                                      setIsViewAgreementDialogOpen(true);
+                                    }}
                                   >
-                                    <Upload className="h-4 w-4 mr-2" />
-                                    Upload Agreement
+                                    <Eye className="h-4 w-4 mr-2" />
+                                    View Agreement
                                   </Button>
-                                );
-                              }
-                            })()}
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
+                                  <Button 
+                                    variant="ghost" 
+                                    size="sm"
+                                    className="h-8 w-8 p-0"
+                                    onClick={() => handleUploadAgreement(investor, investment.purchase_id, investment.investment_id)}
+                                    title="Edit/Replace Agreement"
+                                  >
+                                    <Edit className="h-4 w-4" />
+                                  </Button>
+                                </div>
+                              ) : (
+                                <Button 
+                                  variant="outline" 
+                                  size="sm"
+                                  onClick={() => handleUploadAgreement(investor, investment.purchase_id, investment.investment_id)}
+                                >
+                                  <Upload className="h-4 w-4 mr-2" />
+                                  Upload Agreement
+                                </Button>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      });
+                    })()}
                   </TableBody>
                 </Table>
               </div>
@@ -744,7 +770,7 @@ const ReportsPage = () => {
                       <TableRow key={index}>
                         <TableCell className="font-medium">{detail.quarter_year}</TableCell>
                         <TableCell>{detail.pool_name}</TableCell>
-                        <TableCell className="text-green-600 font-medium">{detail.roi_percentage}%</TableCell>
+                        <TableCell className="text-green-600 font-medium">{detail.roi_percentage.toFixed(2)}%</TableCell>
                         <TableCell>{formatCurrency(detail.investment_amount)}</TableCell>
                         <TableCell>{detail.investment_percentage.toFixed(2)}%</TableCell>
                         <TableCell className="text-green-600 font-medium">
@@ -778,7 +804,13 @@ const ReportsPage = () => {
         )}
 
         {/* Upload Agreement Dialog */}
-        <Dialog open={isUploadDialogOpen} onOpenChange={setIsUploadDialogOpen}>
+        <Dialog open={isUploadDialogOpen} onOpenChange={(open) => {
+          setIsUploadDialogOpen(open);
+          if (!open) {
+            setSelectedInvestmentId(null);
+            setUploadFile(null);
+          }
+        }}>
           <DialogContent>
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
@@ -813,6 +845,7 @@ const ReportsPage = () => {
                 variant="outline"
                 onClick={() => {
                   setIsUploadDialogOpen(false);
+                  setSelectedInvestmentId(null);
                   setUploadFile(null);
                 }}
                 disabled={uploading}

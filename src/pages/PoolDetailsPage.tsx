@@ -851,14 +851,23 @@ const PoolDetailsPage = () => {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {roiDeclarations.map((declaration) => (
+                      {roiDeclarations.map((declaration) => {
+                        // Calculate ROI% from actual payouts: (total payout / total investment) * 100
+                        const totalPayoutForQuarter = payments
+                          .filter(p => p.declaration_id === declaration.declaration_id)
+                          .reduce((sum, p) => sum + p.gross_roi_amount, 0);
+                        const calculatedRoiPercentage = pool && pool.investor_amount > 0
+                          ? (totalPayoutForQuarter / pool.investor_amount) * 100
+                          : declaration.roi_percentage;
+                        
+                        return (
                         <TableRow key={declaration.declaration_id}>
                           <TableCell className="font-medium">
                             {declaration.quarter_year}
                           </TableCell>
                           <TableCell>
                             <span className="font-medium text-primary">
-                              {declaration.roi_percentage}%
+                              {calculatedRoiPercentage.toFixed(2)}%
                             </span>
                           </TableCell>
                           <TableCell>
@@ -897,7 +906,8 @@ const PoolDetailsPage = () => {
                             </div>
                           </TableCell>
                         </TableRow>
-                      ))}
+                        );
+                      })}
                     </TableBody>
                   </Table>
                 </div>

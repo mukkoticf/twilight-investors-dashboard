@@ -438,7 +438,7 @@ const InvestmentDetailPage = () => {
                       </TableCell> */}
                       <TableCell className="text-center">
                         <Badge variant="outline" className="text-purple-600">
-                          {payment.roi_percentage.toFixed(2)}%
+                          {investment ? ((payment.gross_roi_amount / investment.investment_amount) * 100).toFixed(2) : payment.roi_percentage.toFixed(2)}%
                         </Badge>
                       </TableCell>
                       <TableCell className="font-semibold text-blue-600 text-center">
