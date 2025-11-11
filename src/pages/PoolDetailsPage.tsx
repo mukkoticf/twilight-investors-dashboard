@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ArrowLeft, Edit, Building, Car, DollarSign, Shield, Users, TrendingUp, Calendar, Eye, Plus, CheckCircle, XCircle, Clock } from 'lucide-react';
+import { ArrowLeft, Edit, Building, Car, DollarSign, Shield, Users, TrendingUp, Calendar, Eye, Plus, CheckCircle, XCircle, Clock, Search } from 'lucide-react';
 import { usePageMetadata } from '@/hooks/use-page-metadata';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -81,6 +81,7 @@ const PoolDetailsPage = () => {
   const [investorInvestments, setInvestorInvestments] = useState<InvestorInvestment[]>([]);
   const [loading, setLoading] = useState(true);
   const [investmentsLoading, setInvestmentsLoading] = useState(true);
+  const [investorSearchFilter, setInvestorSearchFilter] = useState<string>('');
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [editFormData, setEditFormData] = useState({
     pool_name: '',
@@ -588,10 +589,24 @@ const PoolDetailsPage = () => {
         {/* Investor Investments Table */}
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Users className="h-5 w-5" />
-              {isAdmin ? 'Investments' : 'Your Investments'}
-            </CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2">
+                <Users className="h-5 w-5" />
+                {isAdmin ? 'Investments' : 'Your Investments'}
+              </CardTitle>
+              {isAdmin && (
+                <div className="relative max-w-sm">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <Input
+                    type="text"
+                    placeholder="Search by investor name..."
+                    value={investorSearchFilter}
+                    onChange={(e) => setInvestorSearchFilter(e.target.value)}
+                    className="pl-10 placeholder:text-black-600"
+                  />
+                </div>
+              )}
+            </div>
           </CardHeader>
           <CardContent>
             {investmentsLoading ? (
@@ -618,7 +633,11 @@ const PoolDetailsPage = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {investorInvestments.map((investment) => (
+                  {investorInvestments
+                    .filter((investment) => 
+                      investment.investor_name.toLowerCase().includes(investorSearchFilter.toLowerCase())
+                    )
+                    .map((investment) => (
                     <TableRow key={investment.investment_id}>
                       <TableCell className="font-medium text-center">
                         <div className="flex justify-center">
