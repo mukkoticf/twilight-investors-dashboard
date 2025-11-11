@@ -228,7 +228,19 @@ const InvestmentDetailPage = () => {
 
   // Filter payments to show only those for the current investment's pool
   const filteredPayments = investment?.pool_name 
-    ? quarterlyPayments.filter(payment => payment.pool_name === investment.pool_name)
+    ? quarterlyPayments
+        .filter(payment => payment.pool_name === investment.pool_name)
+        .sort((a, b) => {
+          // First sort by year (descending - latest first)
+          if (b.year !== a.year) {
+            return b.year - a.year;
+          }
+          // Then sort by quarter (Q4 > Q3 > Q2 > Q1)
+          const quarterOrder: { [key: string]: number } = { 'Q4': 4, 'Q3': 3, 'Q2': 2, 'Q1': 1 };
+          const aQuarter = quarterOrder[a.quarter] || 0;
+          const bQuarter = quarterOrder[b.quarter] || 0;
+          return bQuarter - aQuarter;
+        })
     : [];
 
   // Calculate totals only for the current pool's payments

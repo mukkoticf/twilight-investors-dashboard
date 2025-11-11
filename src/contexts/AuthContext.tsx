@@ -122,8 +122,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setUser(null);
       setSession(null);
       setInvestor(null);
-      // Redirect will be handled by ProtectedRoute
-      window.location.href = '/login';
+      // Navigation will be handled by the component calling signOut
     } catch (error) {
       console.error('Error signing out:', error);
     }
