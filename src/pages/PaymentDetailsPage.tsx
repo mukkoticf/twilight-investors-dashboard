@@ -35,12 +35,18 @@ interface QuarterlyROI {
   is_finalized: boolean;
 }
 
+interface CompanyPool {
+  purchase_id: string;
+  investor_amount: number;
+}
+
 const PaymentDetailsPage = () => {
   const { declarationId } = useParams<{ declarationId: string }>();
   const navigate = useNavigate();
   const { isAdmin } = useAuth();
   const [declaration, setDeclaration] = useState<QuarterlyROI | null>(null);
   const [payments, setPayments] = useState<Payment[]>([]);
+  const [pool, setPool] = useState<CompanyPool | null>(null);
   const [loading, setLoading] = useState(true);
   const [uploadingReceipt, setUploadingReceipt] = useState<string | null>(null);
   const [selectedPaymentForUpload, setSelectedPaymentForUpload] = useState<string | null>(null);
@@ -69,6 +75,19 @@ const PaymentDetailsPage = () => {
 
       if (error) throw error;
       setDeclaration(data);
+      
+      // Fetch pool data to get total investment amount
+      if (data?.purchase_id) {
+        const { data: poolData, error: poolError } = await (supabase as any)
+          .from('company_pools')
+          .select('purchase_id, investor_amount')
+          .eq('purchase_id', data.purchase_id)
+          .single();
+        
+        if (!poolError && poolData) {
+          setPool(poolData);
+        }
+      }
     } catch (error) {
       console.error('Error fetching declaration details:', error);
       toast.error('Failed to fetch declaration details');
@@ -216,7 +235,14 @@ const PaymentDetailsPage = () => {
             <div>
               <h1 className="text-3xl font-bold">Payment Details - {declaration?.quarter_year}</h1>
               <p className="text-muted-foreground">
-                ROI: {declaration?.roi_percentage}% | 
+                ROI: {(() => {
+                  // Calculate ROI% from actual payouts: (total payout / total investment) * 100
+                  const totalPayout = payments.reduce((sum, p) => sum + p.gross_roi_amount, 0);
+                  const calculatedRoi = pool && pool.investor_amount > 0
+                    ? (totalPayout / pool.investor_amount) * 100
+                    : declaration?.roi_percentage || 0;
+                  return calculatedRoi.toFixed(2);
+                })()}% | 
                 Declaration Date: {declaration && formatDate(declaration.declaration_date)}
               </p>
             </div>
