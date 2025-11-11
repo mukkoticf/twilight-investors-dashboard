@@ -270,7 +270,7 @@ const Index = () => {
             <CardContent className="p-4">
               <div>
                 <p className="text-xs font-medium text-muted-foreground">Total Investment</p>
-                <p className="text-xl font-bold text-black dark:text-white">{formatCurrency(totalInvestment)}</p>
+                <p className="text-xl font-bold text-green-600">{formatCurrency(totalInvestment)}</p>
               </div>
             </CardContent>
           </Card>
@@ -279,7 +279,7 @@ const Index = () => {
             <CardContent className="p-4">
               <div>
                 <p className="text-xs font-medium text-muted-foreground">Active Pools</p>
-                <p className="text-xl font-bold text-black dark:text-white">{activePools}</p>
+                <p className="text-xl font-bold text-blue-600">{activePools}</p>
               </div>
             </CardContent>
           </Card>
@@ -288,7 +288,7 @@ const Index = () => {
             <CardContent className="p-4">
               <div>
                 <p className="text-xs font-medium text-muted-foreground">Total Vehicles</p>
-                <p className="text-xl font-bold text-black dark:text-white">{totalVehicles}</p>
+                <p className="text-xl font-bold text-orange-600">{totalVehicles}</p>
               </div>
             </CardContent>
           </Card>

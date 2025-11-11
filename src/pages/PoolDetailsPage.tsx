@@ -218,12 +218,33 @@ const PoolDetailsPage = () => {
       const { data: roiData, error: roiError } = await (supabase as any)
         .from('quarterly_roi_declarations')
         .select('*')
-        .eq('purchase_id', poolId)
-        .order('declaration_date', { ascending: false });
+        .eq('purchase_id', poolId);
 
       if (roiError) throw roiError;
 
-      setRoiDeclarations(roiData || []);
+      // Sort by quarter/year (latest first)
+      const sortedRoiData = (roiData || []).sort((a: QuarterlyROI, b: QuarterlyROI) => {
+        const parseQuarterYear = (qy: string) => {
+          const [quarter, year] = qy.split('-');
+          const quarterOrder: { [key: string]: number } = { 'Q4': 4, 'Q3': 3, 'Q2': 2, 'Q1': 1 };
+          return {
+            year: parseInt(year) || 0,
+            quarter: quarterOrder[quarter] || 0
+          };
+        };
+        
+        const aParsed = parseQuarterYear(a.quarter_year);
+        const bParsed = parseQuarterYear(b.quarter_year);
+        
+        // First sort by year (descending - latest first)
+        if (bParsed.year !== aParsed.year) {
+          return bParsed.year - aParsed.year;
+        }
+        // Then sort by quarter (Q4 > Q3 > Q2 > Q1)
+        return bParsed.quarter - aParsed.quarter;
+      });
+
+      setRoiDeclarations(sortedRoiData);
 
       // Fetch payments with investor names
       const { data: paymentData, error: paymentError } = await (supabase as any)
@@ -629,7 +650,6 @@ const PoolDetailsPage = () => {
                     <TableHead className="text-center">Investment Amount</TableHead>
                     <TableHead className="text-center">Phone</TableHead>
                     <TableHead className="text-center">Investment Date</TableHead>
-                    <TableHead className="w-12 text-center"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -645,29 +665,25 @@ const PoolDetailsPage = () => {
                         </div>
                       </TableCell>
                       <TableCell className="font-semibold text-green-600 text-center">
-                        <div className="flex justify-center">
+                        <div className="flex justify-center items-center gap-2">
                           <button
                             onClick={() => navigate(`/investment/${investment.investment_id}`)}
                             className="text-green-600 hover:text-green-800 hover:underline cursor-pointer"
                           >
                             {formatCurrency(investment.investment_amount)}
                           </button>
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-center">{investment.phone}</TableCell>
-                      <TableCell className="text-center">
-                        {formatDate(investment.created_at)}
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <div className="flex justify-center">
                           <button
                             onClick={() => navigate(`/investment/${investment.investment_id}`)}
-                            className="text-black dark:text-white hover:text-primary cursor-pointer p-1 rounded hover:bg-muted transition-colors font-semibold"
+                            className="text-green-600 hover:text-green-800 cursor-pointer p-1 rounded hover:bg-muted transition-colors"
                             title="View Investment Details"
                           >
                             <Eye className="h-4 w-4" />
                           </button>
                         </div>
+                      </TableCell>
+                      <TableCell className="text-center">{investment.phone}</TableCell>
+                      <TableCell className="text-center">
+                        {formatDate(investment.created_at)}
                       </TableCell>
                     </TableRow>
                   ))}

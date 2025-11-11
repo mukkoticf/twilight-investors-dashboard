@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { 
   Home, 
@@ -22,6 +22,7 @@ import { Button } from '@/components/ui/button';
 const Navbar = () => {
   const [isOpen, setIsOpen] = useState(false);
   const location = useLocation();
+  const navigate = useNavigate();
   const { user, investor, isAdmin, signOut } = useAuth();
   
   // Get user display info
@@ -127,7 +128,10 @@ const Navbar = () => {
 
         <div className="p-4 border-t border-border">
           <button 
-            onClick={signOut}
+            onClick={async () => {
+              await signOut();
+              navigate('/login', { replace: true });
+            }}
             className="flex items-center space-x-3 px-3 py-2 w-full rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
           >
             <div className="w-8 h-8 bg-primary/10 text-primary rounded-full flex items-center justify-center">
