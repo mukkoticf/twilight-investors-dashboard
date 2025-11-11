@@ -20,7 +20,8 @@ export interface AnalyticsEvent {
 
 // Local storage key for storing events
 const ANALYTICS_STORAGE_KEY = 'crm_analytics_events';
-const MAX_STORED_EVENTS = 1000;
+const MAX_STORED_EVENTS = 100; // Reduced from 1000 to prevent quota issues
+const MAX_EVENT_AGE_DAYS = 7; // Only keep events from last 7 days
 
 // Queue for storing events before sending to server
 let eventQueue: AnalyticsEvent[] = [];
@@ -29,28 +30,95 @@ let eventQueue: AnalyticsEvent[] = [];
 const loadEvents = (): AnalyticsEvent[] => {
   try {
     const storedEvents = localStorage.getItem(ANALYTICS_STORAGE_KEY);
-    return storedEvents ? JSON.parse(storedEvents) : [];
+    if (!storedEvents) return [];
+    
+    const events = JSON.parse(storedEvents);
+    // Filter out old events (older than MAX_EVENT_AGE_DAYS)
+    const now = Date.now();
+    const maxAge = MAX_EVENT_AGE_DAYS * 24 * 60 * 60 * 1000;
+    return events.filter((event: AnalyticsEvent) => 
+      event.timestamp && (now - event.timestamp) < maxAge
+    );
   } catch (error) {
     console.error('Failed to load analytics events:', error);
+    // Clear corrupted data
+    try {
+      localStorage.removeItem(ANALYTICS_STORAGE_KEY);
+    } catch (e) {
+      // Ignore
+    }
     return [];
   }
 };
 
-// Save events to localStorage
+// Save events to localStorage with size and quota management
 const saveEvents = (events: AnalyticsEvent[]): void => {
   try {
+    // Filter out old events first
+    const now = Date.now();
+    const maxAge = MAX_EVENT_AGE_DAYS * 24 * 60 * 60 * 1000;
+    let filteredEvents = events.filter((event: AnalyticsEvent) => 
+      event.timestamp && (now - event.timestamp) < maxAge
+    );
+    
     // Keep only the latest events up to MAX_STORED_EVENTS
-    const eventsToStore = events.slice(-MAX_STORED_EVENTS);
-    localStorage.setItem(ANALYTICS_STORAGE_KEY, JSON.stringify(eventsToStore));
-  } catch (error) {
-    console.error('Failed to save analytics events:', error);
+    filteredEvents = filteredEvents.slice(-MAX_STORED_EVENTS);
+    
+    // Try to save, but handle quota errors gracefully
+    const eventsJson = JSON.stringify(filteredEvents);
+    
+    // Check approximate size (rough estimate: 1 char ≈ 1 byte)
+    // localStorage typically has 5-10MB limit, so we'll be conservative
+    if (eventsJson.length > 2 * 1024 * 1024) { // 2MB limit
+      // If too large, keep only the most recent 50 events
+      filteredEvents = filteredEvents.slice(-50);
+      const reducedJson = JSON.stringify(filteredEvents);
+      localStorage.setItem(ANALYTICS_STORAGE_KEY, reducedJson);
+    } else {
+      localStorage.setItem(ANALYTICS_STORAGE_KEY, eventsJson);
+    }
+  } catch (error: any) {
+    // If quota exceeded, try to clear old events and keep only recent ones
+    if (error.name === 'QuotaExceededError' || error.code === 22) {
+      try {
+        // Keep only the most recent 20 events
+        const recentEvents = events.slice(-20);
+        localStorage.setItem(ANALYTICS_STORAGE_KEY, JSON.stringify(recentEvents));
+        console.warn('Analytics storage quota exceeded. Cleared old events, keeping only recent 20.');
+      } catch (retryError) {
+        // If still failing, clear everything
+        try {
+          localStorage.removeItem(ANALYTICS_STORAGE_KEY);
+          console.warn('Analytics storage cleared due to quota issues.');
+        } catch (clearError) {
+          // Ignore - can't do anything more
+        }
+      }
+    } else {
+      console.error('Failed to save analytics events:', error);
+    }
   }
 };
 
 // Initialize by loading stored events
 const initAnalytics = (): void => {
-  eventQueue = loadEvents();
-  console.log(`Analytics initialized with ${eventQueue.length} stored events`);
+  try {
+    eventQueue = loadEvents();
+    
+    // If we have too many events, clean them up
+    if (eventQueue.length > MAX_STORED_EVENTS) {
+      eventQueue = eventQueue.slice(-MAX_STORED_EVENTS);
+      saveEvents(eventQueue);
+    }
+    
+    if (import.meta.env.DEV) {
+      console.log(`Analytics initialized with ${eventQueue.length} stored events`);
+    }
+  } catch (error) {
+    // If initialization fails, start with empty queue
+    eventQueue = [];
+    console.warn('Analytics initialization failed, starting with empty queue:', error);
+  }
 };
 
 // Track a user event
@@ -88,11 +156,16 @@ const sendEvents = async (): Promise<void> => {
   
   // In a real application, this would send data to a server
   // For now, we'll just simulate it
-  console.log(`Would send ${eventQueue.length} events to analytics server`);
+  if (import.meta.env.DEV) {
+    console.log(`Would send ${eventQueue.length} events to analytics server`);
+  }
   
-  // After successful send, we could clear the queue
-  // eventQueue = [];
-  // saveEvents(eventQueue);
+  // After successful send, clear old events (keep only last 50 for debugging)
+  // In production, you might want to clear all after successful send
+  if (eventQueue.length > 50) {
+    eventQueue = eventQueue.slice(-50);
+    saveEvents(eventQueue);
+  }
 };
 
 // Debounced version to avoid too many calls

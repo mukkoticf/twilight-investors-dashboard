@@ -58,6 +58,7 @@ interface QuarterlyROI {
   is_finalized: boolean;
   created_at: string;
   updated_at: string;
+  emergency_fund_deduction_amount?: number | null;
 }
 
 interface Payment {
@@ -581,7 +582,7 @@ const PoolDetailsPage = () => {
               <div>
                 <p className="text-xs font-medium text-muted-foreground">Emergency Fund</p>
                 <p className="text-lg font-semibold text-blue-600">
-                  {formatCurrency(pool.emergency_fund_remaining)} / {formatCurrency(pool.emergency_fund_investor_share)}
+                  {formatCurrency(pool.emergency_fund_collected)} / {formatCurrency(pool.emergency_fund_investor_share)}
                 </p>
               </div>
             </CardContent>
@@ -845,6 +846,7 @@ const PoolDetailsPage = () => {
                       <TableRow>
                         <TableHead>Quarter</TableHead>
                         <TableHead>ROI %</TableHead>
+                        <TableHead>Emergency Fund Ded.</TableHead>
                         <TableHead>Declaration Date</TableHead>
                         <TableHead>Status</TableHead>
                         <TableHead>Actions</TableHead>
@@ -869,6 +871,9 @@ const PoolDetailsPage = () => {
                             <span className="font-medium text-primary">
                               {calculatedRoiPercentage.toFixed(2)}%
                             </span>
+                          </TableCell>
+                          <TableCell className="font-medium text-orange-600">
+                            {formatCurrency(declaration.emergency_fund_deduction_amount || 0)}
                           </TableCell>
                           <TableCell>
                             {formatDate(declaration.declaration_date)}
