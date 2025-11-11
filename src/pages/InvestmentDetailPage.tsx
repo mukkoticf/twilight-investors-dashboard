@@ -400,7 +400,7 @@ const InvestmentDetailPage = () => {
                 <TableHeader>
                   <TableRow>
                     <TableHead className="text-center">Quarter</TableHead>
-                    <TableHead className="text-center">Company</TableHead>
+                    {/* <TableHead className="text-center">Company</TableHead> */}
                     <TableHead className="text-center">ROI %</TableHead>
                     <TableHead className="text-center">Payout</TableHead>
                     <TableHead className="text-center">Emergency Fund Ded.</TableHead>
@@ -415,7 +415,7 @@ const InvestmentDetailPage = () => {
                       <TableCell className="font-medium text-center">
                         {payment.quarter} {payment.year}
                       </TableCell>
-                      <TableCell className="text-center">
+                      {/* <TableCell className="text-center">
                         {payment.company_name ? (
                           <Badge variant="secondary" className="text-sm">
                             {payment.company_name}
@@ -423,7 +423,7 @@ const InvestmentDetailPage = () => {
                         ) : (
                           <span className="text-muted-foreground text-sm">-</span>
                         )}
-                      </TableCell>
+                      </TableCell> */}
                       <TableCell className="text-center">
                         <Badge variant="outline" className="text-purple-600">
                           {payment.roi_percentage.toFixed(2)}%
