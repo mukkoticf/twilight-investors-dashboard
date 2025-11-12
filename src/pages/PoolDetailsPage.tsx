@@ -45,6 +45,7 @@ interface InvestorInvestment {
   investment_percentage: number;
   created_at: string;
   investor_name: string;
+  associate_name: string | null;
   email: string;
   phone: string;
 }
@@ -176,6 +177,7 @@ const PoolDetailsPage = () => {
           *,
           investors:investor_id (
             investor_name,
+            associate_name,
             email,
             phone
           )
@@ -196,6 +198,7 @@ const PoolDetailsPage = () => {
       const transformedData = investmentsData?.map((investment: any) => ({
         ...investment,
         investor_name: investment.investors?.investor_name || 'Unknown',
+        associate_name: investment.investors?.associate_name || null,
         email: investment.investors?.email || '',
         phone: investment.investors?.phone || ''
       })) || [];
@@ -648,6 +651,7 @@ const PoolDetailsPage = () => {
                 <TableHeader>
                   <TableRow>
                     <TableHead className="text-center">Investor Name</TableHead>
+                    {isAdmin && <TableHead className="text-center">Associate Name</TableHead>}
                     <TableHead className="text-center">Investment Amount</TableHead>
                     <TableHead className="text-center">Phone</TableHead>
                     <TableHead className="text-center">Investment Date</TableHead>
@@ -665,6 +669,11 @@ const PoolDetailsPage = () => {
                           {investment.investor_name}
                         </div>
                       </TableCell>
+                      {isAdmin && (
+                        <TableCell className="text-center">
+                          {investment.associate_name || '-'}
+                        </TableCell>
+                      )}
                       <TableCell className="font-semibold text-green-600 text-center">
                         <div className="flex justify-center items-center gap-2">
                           <button
