@@ -192,7 +192,7 @@ export type Database = {
       investor_quarterly_payments: {
         Row: {
           payment_id: string
-          investor_id: string
+          investment_id: string
           declaration_id: string
           gross_roi_amount: number
           emergency_fund_deduction: number
@@ -207,7 +207,7 @@ export type Database = {
         }
         Insert: {
           payment_id?: string
-          investor_id: string
+          investment_id: string
           declaration_id: string
           gross_roi_amount: number
           emergency_fund_deduction: number
@@ -222,7 +222,7 @@ export type Database = {
         }
         Update: {
           payment_id?: string
-          investor_id?: string
+          investment_id?: string
           declaration_id?: string
           gross_roi_amount?: number
           emergency_fund_deduction?: number

@@ -247,21 +247,34 @@ const ReportsPage = () => {
 
   const fetchInvestorDetails = async (investorId: string) => {
     try {
-      // Get payments with related data
-      const { data: paymentsData, error: paymentsError } = await (supabase as any)
-        .from('investor_quarterly_payments')
-        .select(`
-          *,
-          quarterly_roi_declarations!inner(quarter_year, roi_percentage, declaration_date, purchase_id),
-          company_pools!inner(pool_name)
-        `)
-        .eq('investor_id', investorId)
-        .order('quarterly_roi_declarations.quarter_year', { ascending: false });
+      // Get payments with related data - query via investments
+      // First get all investments for this investor
+      const { data: investmentIdsData, error: investmentIdsError } = await (supabase as any)
+        .from('investor_investments')
+        .select('investment_id')
+        .eq('investor_id', investorId);
+
+      if (investmentIdsError) throw investmentIdsError;
+
+      const investmentIds = (investmentIdsData || []).map((inv: any) => inv.investment_id);
+
+      // Get payments for these investments
+      const { data: paymentsData, error: paymentsError } = investmentIds.length > 0
+        ? await (supabase as any)
+            .from('investor_quarterly_payments')
+            .select(`
+              *,
+              quarterly_roi_declarations!inner(quarter_year, roi_percentage, declaration_date, purchase_id),
+              company_pools!inner(pool_name)
+            `)
+            .in('investment_id', investmentIds)
+            .order('quarterly_roi_declarations.quarter_year', { ascending: false })
+        : { data: [], error: null };
 
       if (paymentsError) throw paymentsError;
 
-      // Get investment amounts for this investor
-      const { data: investmentsData, error: investmentsError } = await (supabase as any)
+      // investmentsData already fetched above, but we need the full data
+      const { data: fullInvestmentsData, error: fullInvestmentsError } = await (supabase as any)
         .from('investor_investments')
         .select(`
           *,
@@ -269,7 +282,9 @@ const ReportsPage = () => {
         `)
         .eq('investor_id', investorId);
 
-      if (investmentsError) throw investmentsError;
+      if (fullInvestmentsError) throw fullInvestmentsError;
+      
+      const investmentsData = fullInvestmentsData;
 
       // Create a map of pool_id to investment_amount for quick lookup
       const investmentMap = new Map();

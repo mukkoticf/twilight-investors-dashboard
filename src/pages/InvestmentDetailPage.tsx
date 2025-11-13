@@ -29,7 +29,7 @@ interface InvestmentDetail {
 
 interface QuarterlyPayment {
   payment_id: string;
-  investor_id: string;
+  investment_id: string;
   declaration_id: string;
   gross_roi_amount: number;
   emergency_fund_deduction: number;
@@ -139,21 +139,13 @@ const InvestmentDetailPage = () => {
       
       if (!investment) return;
 
-      console.log('Fetching quarterly payments for investor_id:', investment.investor_id);
+      console.log('Fetching quarterly payments for investment_id:', investment.investment_id);
 
-      // First, let's test if we can fetch any quarterly payments at all
-      const { data: allPayments, error: allPaymentsError } = await (supabase as any)
-        .from('investor_quarterly_payments')
-        .select('*')
-        .limit(5);
-
-      console.log('All quarterly payments (test):', allPayments);
-
-      // Fetch payments first
+      // Fetch payments for this specific investment
       const { data: paymentsData, error: paymentsError } = await (supabase as any)
         .from('investor_quarterly_payments')
         .select('*')
-        .eq('investor_id', investment.investor_id)
+        .eq('investment_id', investment.investment_id)
         .order('created_at', { ascending: false });
 
       if (paymentsError) {

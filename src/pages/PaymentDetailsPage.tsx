@@ -104,7 +104,10 @@ const PaymentDetailsPage = () => {
         .from('investor_quarterly_payments')
         .select(`
           *,
-          investors!inner(investor_name)
+          investor_investments!inner(
+            investor_id,
+            investors:investor_id(investor_name)
+          )
         `)
         .eq('declaration_id', declarationId);
 
@@ -112,7 +115,7 @@ const PaymentDetailsPage = () => {
 
       const transformedPayments = paymentsData?.map((p: any) => ({
         ...p,
-        investor_name: p.investors?.investor_name || 'Unknown',
+        investor_name: p.investor_investments?.investors?.investor_name || 'Unknown',
         receipt_url: p.receipt_url || null
       })) || [];
 

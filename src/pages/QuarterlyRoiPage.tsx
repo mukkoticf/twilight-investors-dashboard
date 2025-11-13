@@ -101,12 +101,15 @@ const QuarterlyRoiPage = () => {
 
       if (vehicleError) throw vehicleError;
 
-      // Fetch payments with investor names
+      // Fetch payments with investor names via investments
       const { data: paymentData, error: paymentError } = await (supabase as any)
         .from('investor_quarterly_payments')
         .select(`
           *,
-          investors!inner(investor_name)
+          investor_investments!inner(
+            investor_id,
+            investors:investor_id(investor_name)
+          )
         `);
 
       if (paymentError) throw paymentError;
@@ -122,7 +125,7 @@ const QuarterlyRoiPage = () => {
       setVehicles(vehicleData || []);
       setPayments(paymentData?.map((p: any) => ({
         ...p,
-        investor_name: p.investors?.investor_name || 'Unknown'
+        investor_name: p.investor_investments?.investors?.investor_name || 'Unknown'
       })) || []);
 
       // Check which declarations already have payments generated
