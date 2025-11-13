@@ -235,14 +235,7 @@ const PaymentDetailsPage = () => {
             <div>
               <h1 className="text-3xl font-bold">Payment Details - {declaration?.quarter_year}</h1>
               <p className="text-muted-foreground">
-                ROI: {(() => {
-                  // Calculate ROI% from actual payouts: (total payout / total investment) * 100
-                  const totalPayout = payments.reduce((sum, p) => sum + p.gross_roi_amount, 0);
-                  const calculatedRoi = pool && pool.investor_amount > 0
-                    ? (totalPayout / pool.investor_amount) * 100
-                    : declaration?.roi_percentage || 0;
-                  return calculatedRoi.toFixed(2);
-                })()}% | 
+                Quarterly Return %: {declaration?.roi_percentage?.toFixed(2) || '0.00'}% | 
                 Declaration Date: {declaration && formatDate(declaration.declaration_date)}
               </p>
             </div>
