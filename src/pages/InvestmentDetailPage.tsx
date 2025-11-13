@@ -329,14 +329,11 @@ const InvestmentDetailPage = () => {
 
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium">Total Payout & Avg.ROI</CardTitle>
+              <CardTitle className="text-sm font-medium">Total Payout until Now</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-blue-600">
                 {formatNumber(totalGrossRoi)}
-                {roiPercentage > 0 && (
-                  <span>({roiPercentage.toFixed(2)}%)</span>
-                )}
               </div>
               <p className="text-xs text-muted-foreground">
                 Before deductions
@@ -413,7 +410,7 @@ const InvestmentDetailPage = () => {
                   <TableRow>
                     <TableHead className="text-center">Quarter</TableHead>
                     {/* <TableHead className="text-center">Company</TableHead> */}
-                    <TableHead className="text-center">ROI %</TableHead>
+                    <TableHead className="text-center">Quarterly Return %</TableHead>
                     <TableHead className="text-center">Payout</TableHead>
                     <TableHead className="text-center">Emergency Fund Ded.</TableHead>
                     <TableHead className="text-center">TDS Ded.</TableHead>
