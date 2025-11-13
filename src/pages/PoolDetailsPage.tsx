@@ -53,6 +53,7 @@ interface InvestorInvestment {
 interface QuarterlyROI {
   declaration_id: string;
   quarter_year: string;
+  month_names: string | null;
   roi_percentage: number;
   declaration_date: string;
   purchase_id: string;
@@ -866,7 +867,7 @@ const PoolDetailsPage = () => {
                         return (
                         <TableRow key={declaration.declaration_id}>
                           <TableCell className="font-medium">
-                            {declaration.quarter_year}
+                            {declaration.quarter_year}{declaration.month_names ? ` (${declaration.month_names})` : ''}
                           </TableCell>
                           <TableCell>
                             <span className="font-medium text-primary">

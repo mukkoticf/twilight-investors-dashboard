@@ -42,6 +42,7 @@ interface QuarterlyPayment {
   quarter: string;
   year: number;
   quarter_year: string;
+  month_names: string | null;
   roi_percentage: number;
   declaration_date: string | null;
   pool_name: string;
@@ -148,19 +149,10 @@ const InvestmentDetailPage = () => {
 
       console.log('All quarterly payments (test):', allPayments);
 
+      // Fetch payments first
       const { data: paymentsData, error: paymentsError } = await (supabase as any)
         .from('investor_quarterly_payments')
-        .select(`
-          *,
-          quarterly_roi_declarations:declaration_id (
-            quarter_year,
-            roi_percentage,
-            declaration_date,
-            company_pools!inner (
-              pool_name
-            )
-          )
-        `)
+        .select('*')
         .eq('investor_id', investment.investor_id)
         .order('created_at', { ascending: false });
 
@@ -171,9 +163,41 @@ const InvestmentDetailPage = () => {
 
       console.log('Raw payments data:', paymentsData);
 
+      // Fetch declarations separately if we have payments
+      let declarationsMap = new Map();
+      if (paymentsData && paymentsData.length > 0) {
+        const declarationIds = [...new Set(paymentsData.map((p: any) => p.declaration_id))];
+        
+        const { data: declarationsData, error: declarationsError } = await (supabase as any)
+          .from('quarterly_roi_declarations')
+          .select(`
+            declaration_id,
+            quarter_year,
+            month_names,
+            roi_percentage,
+            declaration_date,
+            purchase_id,
+            company_pools:purchase_id (
+              pool_name
+            )
+          `)
+          .in('declaration_id', declarationIds);
+
+        if (declarationsError) {
+          console.error('Declarations query error:', declarationsError);
+          // Continue even if declarations fail
+        } else {
+          // Create a map for quick lookup
+          declarationsData?.forEach((decl: any) => {
+            declarationsMap.set(decl.declaration_id, decl);
+          });
+        }
+      }
+
       // Transform the data to flatten the quarterly information
       const transformedData = paymentsData?.map((payment: any) => {
-        const quarterYear = payment.quarterly_roi_declarations?.quarter_year || 'Q1-2024';
+        const declaration = declarationsMap.get(payment.declaration_id);
+        const quarterYear = declaration?.quarter_year || 'Q1-2024';
         const [quarter, year] = quarterYear.split('-');
         
         return {
@@ -181,9 +205,10 @@ const InvestmentDetailPage = () => {
           quarter: quarter || 'Q1',
           year: parseInt(year) || new Date().getFullYear(),
           quarter_year: quarterYear,
-          roi_percentage: payment.quarterly_roi_declarations?.roi_percentage || 0,
-          declaration_date: payment.quarterly_roi_declarations?.declaration_date || null,
-          pool_name: payment.quarterly_roi_declarations?.company_pools?.pool_name || 'Unknown Pool',
+          month_names: declaration?.month_names || null,
+          roi_percentage: declaration?.roi_percentage || 0,
+          declaration_date: declaration?.declaration_date || null,
+          pool_name: declaration?.company_pools?.pool_name || 'Unknown Pool',
           company_name: payment.company_name || null
         };
       }) || [];
@@ -422,7 +447,7 @@ const InvestmentDetailPage = () => {
                   {filteredPayments.map((payment) => (
                     <TableRow key={payment.payment_id}>
                       <TableCell className="font-medium text-center">
-                        {payment.quarter} {payment.year}
+                        {payment.quarter_year}{payment.month_names ? ` (${payment.month_names})` : ''}
                       </TableCell>
                       {/* <TableCell className="text-center">
                         {payment.company_name ? (

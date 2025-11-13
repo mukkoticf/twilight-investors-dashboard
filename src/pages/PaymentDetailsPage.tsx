@@ -29,6 +29,7 @@ interface Payment {
 interface QuarterlyROI {
   declaration_id: string;
   quarter_year: string;
+  month_names: string | null;
   roi_percentage: number;
   declaration_date: string;
   purchase_id: string;
@@ -233,7 +234,7 @@ const PaymentDetailsPage = () => {
               <ArrowLeft className="h-4 w-4" />
             </Button>
             <div>
-              <h1 className="text-3xl font-bold">Payment Details - {declaration?.quarter_year}</h1>
+              <h1 className="text-3xl font-bold">Payment Details - {declaration?.quarter_year}{declaration?.month_names ? ` (${declaration.month_names})` : ''}</h1>
               <p className="text-muted-foreground">
                 Quarterly Return %: {declaration?.roi_percentage?.toFixed(2) || '0.00'}% | 
                 Declaration Date: {declaration && formatDate(declaration.declaration_date)}
