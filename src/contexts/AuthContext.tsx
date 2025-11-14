@@ -46,18 +46,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .from('investors')
         .select('*')
         .eq('user_id', userId)
-        .single();
+        .maybeSingle(); // Use maybeSingle() instead of single() to avoid errors when no record exists
 
       if (error) {
-        // If no investor found, user might be admin
-        console.log('No investor record found for user:', userId);
+        // Check if it's a 406 (Not Acceptable) or PGRST116 (no rows) - these are expected for admin users
+        if (error.code === 'PGRST116' || error.status === 406 || error.message?.includes('No rows')) {
+          // User might be admin without investor record - this is expected
+          setInvestor(null);
+          return;
+        }
+        // For other errors, log them
+        console.error('Error fetching investor data:', error);
         setInvestor(null);
         return;
       }
 
-      setInvestor(data);
+      if (data) {
+        setInvestor(data);
+      } else {
+        // No investor record found - user might be admin
+        setInvestor(null);
+      }
     } catch (error) {
-      console.error('Error fetching investor data:', error);
+      // Silently handle errors - admin users won't have investor records
       setInvestor(null);
     }
   };
