@@ -7,7 +7,10 @@ import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
-import { ArrowLeft, DollarSign, TrendingUp, Calendar, Building, User, Eye } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { ArrowLeft, DollarSign, TrendingUp, Calendar, Building, User, Eye, Save, X, Plus } from 'lucide-react';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { usePageMetadata } from '@/hooks/use-page-metadata';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -48,6 +51,7 @@ interface QuarterlyPayment {
   pool_name: string;
   company_name: string | null;
   receipt_url: string | null;
+  remarks: string | null;
 }
 
 const InvestmentDetailPage = () => {
@@ -59,6 +63,27 @@ const InvestmentDetailPage = () => {
   const [loading, setLoading] = useState(true);
   const [quarterlyLoading, setQuarterlyLoading] = useState(true);
   // const [selectedPoolFilter, setSelectedPoolFilter] = useState<string>('');
+  
+  // Editing states
+  const [editingInvestmentAmount, setEditingInvestmentAmount] = useState(false);
+  const [investmentAmountValue, setInvestmentAmountValue] = useState<string>('');
+  const [editingPayments, setEditingPayments] = useState<{ [key: string]: any }>({});
+  const [editingRemarks, setEditingRemarks] = useState<{ [key: string]: boolean }>({});
+  const [saving, setSaving] = useState<string | null>(null);
+  
+  // Add payment form states
+  const [showAddPaymentDialog, setShowAddPaymentDialog] = useState(false);
+  const [availableDeclarations, setAvailableDeclarations] = useState<any[]>([]);
+  const [newPayment, setNewPayment] = useState({
+    declaration_id: '',
+    gross_roi_amount: '',
+    emergency_fund_deduction: '',
+    tds_deduction: '',
+    net_payable_amount: '',
+    payment_status: 'Paid' as 'Pending' | 'Paid' | 'Failed',
+    payment_date: '',
+    remarks: ''
+  });
 
   usePageMetadata({
     defaultTitle: investment ? `Investment Details - ${investment.investor_name}` : "Investment Details - Investor Management",
@@ -81,6 +106,7 @@ const InvestmentDetailPage = () => {
   useEffect(() => {
     if (investment) {
       fetchQuarterlyPayments();
+      setInvestmentAmountValue(investment.investment_amount.toString());
     }
   }, [investment]);
 
@@ -229,6 +255,252 @@ const InvestmentDetailPage = () => {
     }).format(amount);
   };
 
+  // Parse number from formatted string
+  const parseNumber = (value: string): number => {
+    return parseFloat(value.replace(/[₹,\s]/g, '')) || 0;
+  };
+
+  // Save investment amount
+  const handleSaveInvestmentAmount = async () => {
+    if (!investment || !isAdmin) return;
+    
+    const newAmount = parseNumber(investmentAmountValue);
+    if (newAmount <= 0) {
+      toast.error('Investment amount must be greater than 0');
+      return;
+    }
+
+    try {
+      setSaving('investment_amount');
+      const { error } = await (supabase as any)
+        .from('investor_investments')
+        .update({ investment_amount: newAmount })
+        .eq('investment_id', investment.investment_id);
+
+      if (error) throw error;
+
+      setInvestment(prev => prev ? { ...prev, investment_amount: newAmount } : null);
+      setEditingInvestmentAmount(false);
+      toast.success('Investment amount updated successfully');
+    } catch (error: any) {
+      console.error('Error updating investment amount:', error);
+      toast.error('Failed to update investment amount');
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  // Save payment field
+  const handleSavePaymentField = async (paymentId: string, field: string, value: number) => {
+    if (!isAdmin) return;
+
+    try {
+      setSaving(`${paymentId}-${field}`);
+      
+      // Calculate net_payable_amount if other fields are being updated
+      let updateData: any = { [field]: value };
+      
+      if (field === 'gross_roi_amount' || field === 'emergency_fund_deduction' || field === 'tds_deduction') {
+        const payment = quarterlyPayments.find(p => p.payment_id === paymentId);
+        if (payment) {
+          const grossRoi = field === 'gross_roi_amount' ? value : payment.gross_roi_amount;
+          const emergencyFund = field === 'emergency_fund_deduction' ? value : payment.emergency_fund_deduction;
+          const tds = field === 'tds_deduction' ? value : payment.tds_deduction;
+          
+          const afterEmergency = grossRoi - emergencyFund;
+          const netPayable = afterEmergency - tds;
+          updateData.net_payable_amount = Math.max(0, netPayable);
+        }
+      }
+
+      const { error } = await (supabase as any)
+        .from('investor_quarterly_payments')
+        .update(updateData)
+        .eq('payment_id', paymentId);
+
+      if (error) throw error;
+
+      // Update local state
+      setQuarterlyPayments(prev => prev.map(p => {
+        if (p.payment_id === paymentId) {
+          const updated = { ...p, ...updateData };
+          return updated;
+        }
+        return p;
+      }));
+
+      // Clear editing state for this field
+      const editingKey = `${paymentId}-${field}`;
+      setEditingPayments(prev => {
+        const newState = { ...prev };
+        delete newState[editingKey];
+        return newState;
+      });
+
+      toast.success(`${field.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())} updated successfully`);
+    } catch (error: any) {
+      console.error(`Error updating ${field}:`, error);
+      toast.error(`Failed to update ${field.replace(/_/g, ' ')}`);
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  // Start editing a payment field
+  const startEditingPayment = (paymentId: string, field: string, currentValue: number) => {
+    if (!isAdmin) return;
+    const editingKey = `${paymentId}-${field}`;
+    setEditingPayments(prev => ({
+      ...prev,
+      [editingKey]: currentValue.toString()
+    }));
+  };
+
+  // Cancel editing
+  const cancelEditing = (paymentId: string, field: string) => {
+    const editingKey = `${paymentId}-${field}`;
+    setEditingPayments(prev => {
+      const newState = { ...prev };
+      delete newState[editingKey];
+      return newState;
+    });
+  };
+
+  // Fetch available declarations for the current pool
+  const fetchAvailableDeclarations = async () => {
+    if (!investment) return;
+    
+    try {
+      // Fetch all declarations for this pool (including non-finalized for manual entry)
+      const { data: declarations, error } = await (supabase as any)
+        .from('quarterly_roi_declarations')
+        .select('declaration_id, quarter_year, month_names, declaration_date, is_finalized')
+        .eq('purchase_id', investment.purchase_id)
+        .order('declaration_date', { ascending: false });
+      
+      if (error) throw error;
+      
+      setAvailableDeclarations(declarations || []);
+      
+      if (declarations && declarations.length === 0) {
+        toast.info('No quarters available for this pool');
+      }
+    } catch (error: any) {
+      console.error('Error fetching declarations:', error);
+      toast.error('Failed to fetch available quarters');
+    }
+  };
+
+  // Handle opening add payment dialog
+  const handleOpenAddPaymentDialog = () => {
+    if (!investment) {
+      toast.error('Investment not loaded');
+      return;
+    }
+    fetchAvailableDeclarations();
+    setShowAddPaymentDialog(true);
+  };
+
+  // Save new payment
+  const handleSaveNewPayment = async () => {
+    if (!investment || !isAdmin) return;
+    
+    // Validate required fields
+    if (!newPayment.declaration_id) {
+      toast.error('Please select a quarter');
+      return;
+    }
+    
+    if (!newPayment.gross_roi_amount || parseFloat(newPayment.gross_roi_amount) < 0) {
+      toast.error('Please enter a valid payout amount');
+      return;
+    }
+    
+    try {
+      setSaving('new-payment');
+      
+      const paymentData = {
+        investment_id: investment.investment_id,
+        declaration_id: newPayment.declaration_id,
+        gross_roi_amount: parseFloat(newPayment.gross_roi_amount) || 0,
+        emergency_fund_deduction: parseFloat(newPayment.emergency_fund_deduction) || 0,
+        tds_deduction: parseFloat(newPayment.tds_deduction) || 0,
+        net_payable_amount: parseFloat(newPayment.net_payable_amount) || 0,
+        payment_status: newPayment.payment_status,
+        payment_date: newPayment.payment_date || null,
+        remarks: newPayment.remarks || null
+      };
+      
+      const { error } = await (supabase as any)
+        .from('investor_quarterly_payments')
+        .insert(paymentData);
+      
+      if (error) throw error;
+      
+      toast.success('Payment entry added successfully');
+      
+      // Reset form
+      setNewPayment({
+        declaration_id: '',
+        gross_roi_amount: '',
+        emergency_fund_deduction: '',
+        tds_deduction: '',
+        net_payable_amount: '',
+        payment_status: 'Paid',
+        payment_date: '',
+        remarks: ''
+      });
+      
+      setShowAddPaymentDialog(false);
+      
+      // Refresh payments
+      await fetchQuarterlyPayments();
+    } catch (error: any) {
+      console.error('Error saving payment:', error);
+      toast.error('Failed to save payment entry');
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  // Save remark
+  const handleSaveRemark = async (paymentId: string, remark: string) => {
+    if (!isAdmin) return;
+
+    try {
+      setSaving(`${paymentId}-remarks`);
+      
+      const { error } = await (supabase as any)
+        .from('investor_quarterly_payments')
+        .update({ remarks: remark || null })
+        .eq('payment_id', paymentId);
+
+      if (error) throw error;
+
+      // Update local state
+      setQuarterlyPayments(prev => prev.map(p => {
+        if (p.payment_id === paymentId) {
+          return { ...p, remarks: remark || null };
+        }
+        return p;
+      }));
+
+      // Clear editing state
+      setEditingRemarks(prev => {
+        const newState = { ...prev };
+        delete newState[paymentId];
+        return newState;
+      });
+
+      toast.success('Remark updated successfully');
+    } catch (error: any) {
+      console.error('Error updating remark:', error);
+      toast.error('Failed to update remark');
+    } finally {
+      setSaving(null);
+    }
+  };
+
   const getStatusBadge = (status: string) => {
     const variants = {
       'Active': 'default',
@@ -310,7 +582,7 @@ const InvestmentDetailPage = () => {
     <PageLayout>
       <div className="space-y-6">
         {/* Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 md:gap-0">
           <div className="flex items-center gap-4">
             <Button 
               variant="outline" 
@@ -322,14 +594,16 @@ const InvestmentDetailPage = () => {
               
             </Button>
             <div>
-              <h1 className="text-3xl font-bold">Investment Details</h1>
-              {isAdmin && (
-                <p className="text-muted-foreground">
-                  {investment.investor_name} - {investment.pool_name}
-                </p>
-              )}
+              <h1 className="text-2xl md:text-3xl font-bold">Investment Details</h1>
             </div>
           </div>
+          <Card className="w-full md:w-auto bg-blue-50 border-blue-200">
+            <CardContent className="p-3 md:p-4">
+              <p className="text-base md:text-2xl font-bold break-words text-left md:text-right text-blue-600">
+                {investment.investor_name}
+              </p>
+            </CardContent>
+          </Card>
         </div>
 
         {/* Investment Summary */}
@@ -339,8 +613,42 @@ const InvestmentDetailPage = () => {
               <CardTitle className="text-sm font-medium">Investment Amount</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-green-600">{formatCurrency(investment.investment_amount)}</div>
-              
+              {isAdmin && editingInvestmentAmount ? (
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="number"
+                    value={investmentAmountValue}
+                    onChange={(e) => setInvestmentAmountValue(e.target.value)}
+                    className="text-2xl font-bold text-green-600 h-auto py-1"
+                    autoFocus
+                  />
+                  <Button
+                    size="sm"
+                    onClick={handleSaveInvestmentAmount}
+                    disabled={saving === 'investment_amount'}
+                  >
+                    <Save className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setEditingInvestmentAmount(false);
+                      setInvestmentAmountValue(investment.investment_amount.toString());
+                    }}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              ) : (
+                <div 
+                  className="text-2xl font-bold text-green-600 cursor-pointer hover:bg-muted/50 rounded px-2 py-1 -mx-2 -my-1"
+                  onClick={() => isAdmin && setEditingInvestmentAmount(true)}
+                  title={isAdmin ? "Click to edit" : ""}
+                >
+                  {formatCurrency(investment.investment_amount)}
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -387,6 +695,163 @@ const InvestmentDetailPage = () => {
                   )}
                 </CardTitle>
               </div>
+              {isAdmin && (
+                <Dialog open={showAddPaymentDialog} onOpenChange={setShowAddPaymentDialog}>
+                  <DialogTrigger asChild>
+                    <Button onClick={handleOpenAddPaymentDialog} size="sm" className="flex items-center gap-2">
+                      <Plus className="h-4 w-4" />
+                      Add Payment
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+                    <DialogHeader>
+                      <DialogTitle>Add Quarterly Payment Entry</DialogTitle>
+                      <DialogDescription>
+                        Fill in the payment details for this investment. Make sure the investment_id and declaration_id are correct.
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="declaration">Quarter *</Label>
+                        <Select
+                          value={newPayment.declaration_id}
+                          onValueChange={(value) => setNewPayment(prev => ({ ...prev, declaration_id: value }))}
+                        >
+                          <SelectTrigger id="declaration">
+                            <SelectValue placeholder="Select a quarter" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {availableDeclarations.map((decl) => (
+                              <SelectItem key={decl.declaration_id} value={decl.declaration_id}>
+                                {decl.quarter_year} {decl.month_names ? `(${decl.month_names})` : ''} - {new Date(decl.declaration_date).toLocaleDateString()}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="gross_roi">Payout (Gross ROI Amount) *</Label>
+                          <Input
+                            id="gross_roi"
+                            type="number"
+                            step="0.01"
+                            value={newPayment.gross_roi_amount}
+                            onChange={(e) => setNewPayment(prev => ({ ...prev, gross_roi_amount: e.target.value }))}
+                            placeholder="0.00"
+                          />
+                        </div>
+                        
+                        <div className="space-y-2">
+                          <Label htmlFor="emergency_fund">Emergency Fund Deduction</Label>
+                          <Input
+                            id="emergency_fund"
+                            type="number"
+                            step="0.01"
+                            value={newPayment.emergency_fund_deduction}
+                            onChange={(e) => setNewPayment(prev => ({ ...prev, emergency_fund_deduction: e.target.value }))}
+                            placeholder="0.00"
+                          />
+                        </div>
+                      </div>
+                      
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="tds">TDS Deduction</Label>
+                          <Input
+                            id="tds"
+                            type="number"
+                            step="0.01"
+                            value={newPayment.tds_deduction}
+                            onChange={(e) => setNewPayment(prev => ({ ...prev, tds_deduction: e.target.value }))}
+                            placeholder="0.00"
+                          />
+                        </div>
+                        
+                        <div className="space-y-2">
+                          <Label htmlFor="net_payable">Net Payable Amount</Label>
+                          <Input
+                            id="net_payable"
+                            type="number"
+                            step="0.01"
+                            value={newPayment.net_payable_amount}
+                            onChange={(e) => setNewPayment(prev => ({ ...prev, net_payable_amount: e.target.value }))}
+                            placeholder="0.00"
+                          />
+                        </div>
+                      </div>
+                      
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="payment_status">Payment Status</Label>
+                          <Select
+                            value={newPayment.payment_status}
+                            onValueChange={(value: 'Pending' | 'Paid' | 'Failed') => setNewPayment(prev => ({ ...prev, payment_status: value }))}
+                          >
+                            <SelectTrigger id="payment_status">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="Pending">Pending</SelectItem>
+                              <SelectItem value="Paid">Paid</SelectItem>
+                              <SelectItem value="Failed">Failed</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        
+                        <div className="space-y-2">
+                          <Label htmlFor="payment_date">Payment Date</Label>
+                          <Input
+                            id="payment_date"
+                            type="date"
+                            value={newPayment.payment_date}
+                            onChange={(e) => setNewPayment(prev => ({ ...prev, payment_date: e.target.value }))}
+                          />
+                        </div>
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <Label htmlFor="remarks">Remarks</Label>
+                        <Textarea
+                          id="remarks"
+                          value={newPayment.remarks}
+                          onChange={(e) => setNewPayment(prev => ({ ...prev, remarks: e.target.value }))}
+                          placeholder="Enter any remarks..."
+                          rows={3}
+                        />
+                      </div>
+                      
+                      <div className="flex justify-end gap-2 pt-4">
+                        <Button
+                          variant="outline"
+                          onClick={() => {
+                            setShowAddPaymentDialog(false);
+                            setNewPayment({
+                              declaration_id: '',
+                              gross_roi_amount: '',
+                              emergency_fund_deduction: '',
+                              tds_deduction: '',
+                              net_payable_amount: '',
+                              payment_status: 'Paid',
+                              payment_date: '',
+                              remarks: ''
+                            });
+                          }}
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          onClick={handleSaveNewPayment}
+                          disabled={saving === 'new-payment'}
+                        >
+                          {saving === 'new-payment' ? 'Saving...' : 'Save Payment'}
+                        </Button>
+                      </div>
+                    </div>
+                  </DialogContent>
+                </Dialog>
+              )}
               {/* {uniquePools.length > 1 && (
                 <div className="flex items-center space-x-2">
                   <Label htmlFor="pool-filter" className="text-sm font-medium">
@@ -433,6 +898,7 @@ const InvestmentDetailPage = () => {
                     <TableHead className="text-center">TDS Ded.</TableHead>
                     <TableHead className="text-center">Net Payable Amount</TableHead>
                     <TableHead className="text-center">Receipt</TableHead>
+                    <TableHead className="text-center">Remark</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -451,21 +917,249 @@ const InvestmentDetailPage = () => {
                         )}
                       </TableCell> */}
                       <TableCell className="text-center">
-                        <Badge variant="outline" className="text-purple-600">
-                          {investment ? ((payment.gross_roi_amount / investment.investment_amount) * 100).toFixed(2) : payment.roi_percentage.toFixed(2)}%
-                        </Badge>
+                        {(() => {
+                          const editingKey = `${payment.payment_id}-roi_percentage`;
+                          const isEditing = isAdmin && editingPayments[editingKey] !== undefined;
+                          const roiPercent = investment ? ((payment.gross_roi_amount / investment.investment_amount) * 100) : payment.roi_percentage;
+                          
+                          if (isEditing) {
+                            return (
+                              <div className="flex items-center justify-center gap-1">
+                                <Input
+                                  type="number"
+                                  step="0.01"
+                                  value={editingPayments[editingKey]}
+                                  onChange={(e) => setEditingPayments(prev => ({ ...prev, [editingKey]: e.target.value }))}
+                                  className="w-20 h-8 text-sm"
+                                  onBlur={() => {
+                                    const newValue = parseFloat(editingPayments[editingKey]);
+                                    if (!isNaN(newValue) && newValue >= 0) {
+                                      // Calculate gross_roi_amount from percentage
+                                      const newGrossRoi = (investment.investment_amount * newValue) / 100;
+                                      handleSavePaymentField(payment.payment_id, 'gross_roi_amount', newGrossRoi);
+                                    } else {
+                                      cancelEditing(payment.payment_id, 'roi_percentage');
+                                    }
+                                  }}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                      const newValue = parseFloat(editingPayments[editingKey]);
+                                      if (!isNaN(newValue) && newValue >= 0) {
+                                        const newGrossRoi = (investment.investment_amount * newValue) / 100;
+                                        handleSavePaymentField(payment.payment_id, 'gross_roi_amount', newGrossRoi);
+                                      }
+                                    } else if (e.key === 'Escape') {
+                                      cancelEditing(payment.payment_id, 'roi_percentage');
+                                    }
+                                  }}
+                                  autoFocus
+                                />
+                              </div>
+                            );
+                          }
+                          return (
+                            <Badge 
+                              variant="outline" 
+                              className="text-purple-600 cursor-pointer hover:bg-muted/50"
+                              onClick={() => isAdmin && startEditingPayment(payment.payment_id, 'roi_percentage', roiPercent)}
+                              title={isAdmin ? "Click to edit" : ""}
+                            >
+                              {roiPercent.toFixed(2)}%
+                            </Badge>
+                          );
+                        })()}
                       </TableCell>
                       <TableCell className="font-semibold text-blue-600 text-center">
-                        {formatCurrency(payment.gross_roi_amount)}
+                        {(() => {
+                          const editingKey = `${payment.payment_id}-gross_roi_amount`;
+                          const isEditing = isAdmin && editingPayments[editingKey] !== undefined;
+                          
+                          if (isEditing) {
+                            return (
+                              <div className="flex items-center justify-center gap-1">
+                                <Input
+                                  type="number"
+                                  step="0.01"
+                                  value={editingPayments[editingKey]}
+                                  onChange={(e) => setEditingPayments(prev => ({ ...prev, [editingKey]: e.target.value }))}
+                                  className="w-24 h-8 text-sm"
+                                  onBlur={() => {
+                                    const newValue = parseNumber(editingPayments[editingKey]);
+                                    if (newValue >= 0) {
+                                      handleSavePaymentField(payment.payment_id, 'gross_roi_amount', newValue);
+                                    } else {
+                                      cancelEditing(payment.payment_id, 'gross_roi_amount');
+                                    }
+                                  }}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                      const newValue = parseNumber(editingPayments[editingKey]);
+                                      if (newValue >= 0) {
+                                        handleSavePaymentField(payment.payment_id, 'gross_roi_amount', newValue);
+                                      }
+                                    } else if (e.key === 'Escape') {
+                                      cancelEditing(payment.payment_id, 'gross_roi_amount');
+                                    }
+                                  }}
+                                  autoFocus
+                                />
+                              </div>
+                            );
+                          }
+                          return (
+                            <span 
+                              className="cursor-pointer hover:bg-muted/50 rounded px-2 py-1 -mx-2 -my-1"
+                              onClick={() => isAdmin && startEditingPayment(payment.payment_id, 'gross_roi_amount', payment.gross_roi_amount)}
+                              title={isAdmin ? "Click to edit" : ""}
+                            >
+                              {formatCurrency(payment.gross_roi_amount)}
+                            </span>
+                          );
+                        })()}
                       </TableCell>
                       <TableCell className="font-semibold text-orange-600 text-center">
-                        {formatCurrency(payment.emergency_fund_deduction)}
+                        {(() => {
+                          const editingKey = `${payment.payment_id}-emergency_fund_deduction`;
+                          const isEditing = isAdmin && editingPayments[editingKey] !== undefined;
+                          
+                          if (isEditing) {
+                            return (
+                              <div className="flex items-center justify-center gap-1">
+                                <Input
+                                  type="number"
+                                  step="0.01"
+                                  value={editingPayments[editingKey]}
+                                  onChange={(e) => setEditingPayments(prev => ({ ...prev, [editingKey]: e.target.value }))}
+                                  className="w-24 h-8 text-sm"
+                                  onBlur={() => {
+                                    const newValue = parseNumber(editingPayments[editingKey]);
+                                    if (newValue >= 0) {
+                                      handleSavePaymentField(payment.payment_id, 'emergency_fund_deduction', newValue);
+                                    } else {
+                                      cancelEditing(payment.payment_id, 'emergency_fund_deduction');
+                                    }
+                                  }}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                      const newValue = parseNumber(editingPayments[editingKey]);
+                                      if (newValue >= 0) {
+                                        handleSavePaymentField(payment.payment_id, 'emergency_fund_deduction', newValue);
+                                      }
+                                    } else if (e.key === 'Escape') {
+                                      cancelEditing(payment.payment_id, 'emergency_fund_deduction');
+                                    }
+                                  }}
+                                  autoFocus
+                                />
+                              </div>
+                            );
+                          }
+                          return (
+                            <span 
+                              className="cursor-pointer hover:bg-muted/50 rounded px-2 py-1 -mx-2 -my-1"
+                              onClick={() => isAdmin && startEditingPayment(payment.payment_id, 'emergency_fund_deduction', payment.emergency_fund_deduction)}
+                              title={isAdmin ? "Click to edit" : ""}
+                            >
+                              {formatCurrency(payment.emergency_fund_deduction)}
+                            </span>
+                          );
+                        })()}
                       </TableCell>
                       <TableCell className="font-semibold text-red-600 text-center">
-                        {formatCurrency(payment.tds_deduction)}
+                        {(() => {
+                          const editingKey = `${payment.payment_id}-tds_deduction`;
+                          const isEditing = isAdmin && editingPayments[editingKey] !== undefined;
+                          
+                          if (isEditing) {
+                            return (
+                              <div className="flex items-center justify-center gap-1">
+                                <Input
+                                  type="number"
+                                  step="0.01"
+                                  value={editingPayments[editingKey]}
+                                  onChange={(e) => setEditingPayments(prev => ({ ...prev, [editingKey]: e.target.value }))}
+                                  className="w-24 h-8 text-sm"
+                                  onBlur={() => {
+                                    const newValue = parseNumber(editingPayments[editingKey]);
+                                    if (newValue >= 0) {
+                                      handleSavePaymentField(payment.payment_id, 'tds_deduction', newValue);
+                                    } else {
+                                      cancelEditing(payment.payment_id, 'tds_deduction');
+                                    }
+                                  }}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                      const newValue = parseNumber(editingPayments[editingKey]);
+                                      if (newValue >= 0) {
+                                        handleSavePaymentField(payment.payment_id, 'tds_deduction', newValue);
+                                      }
+                                    } else if (e.key === 'Escape') {
+                                      cancelEditing(payment.payment_id, 'tds_deduction');
+                                    }
+                                  }}
+                                  autoFocus
+                                />
+                              </div>
+                            );
+                          }
+                          return (
+                            <span 
+                              className="cursor-pointer hover:bg-muted/50 rounded px-2 py-1 -mx-2 -my-1"
+                              onClick={() => isAdmin && startEditingPayment(payment.payment_id, 'tds_deduction', payment.tds_deduction)}
+                              title={isAdmin ? "Click to edit" : ""}
+                            >
+                              {formatCurrency(payment.tds_deduction)}
+                            </span>
+                          );
+                        })()}
                       </TableCell>
                       <TableCell className="font-semibold text-green-600 text-center">
-                        {formatCurrency(payment.net_payable_amount)}
+                        {(() => {
+                          const editingKey = `${payment.payment_id}-net_payable_amount`;
+                          const isEditing = isAdmin && editingPayments[editingKey] !== undefined;
+                          
+                          if (isEditing) {
+                            return (
+                              <div className="flex items-center justify-center gap-1">
+                                <Input
+                                  type="number"
+                                  step="0.01"
+                                  value={editingPayments[editingKey]}
+                                  onChange={(e) => setEditingPayments(prev => ({ ...prev, [editingKey]: e.target.value }))}
+                                  className="w-24 h-8 text-sm"
+                                  onBlur={() => {
+                                    const newValue = parseNumber(editingPayments[editingKey]);
+                                    if (newValue >= 0) {
+                                      handleSavePaymentField(payment.payment_id, 'net_payable_amount', newValue);
+                                    } else {
+                                      cancelEditing(payment.payment_id, 'net_payable_amount');
+                                    }
+                                  }}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                      const newValue = parseNumber(editingPayments[editingKey]);
+                                      if (newValue >= 0) {
+                                        handleSavePaymentField(payment.payment_id, 'net_payable_amount', newValue);
+                                      }
+                                    } else if (e.key === 'Escape') {
+                                      cancelEditing(payment.payment_id, 'net_payable_amount');
+                                    }
+                                  }}
+                                  autoFocus
+                                />
+                              </div>
+                            );
+                          }
+                          return (
+                            <span 
+                              className="cursor-pointer hover:bg-muted/50 rounded px-2 py-1 -mx-2 -my-1"
+                              onClick={() => isAdmin && startEditingPayment(payment.payment_id, 'net_payable_amount', payment.net_payable_amount)}
+                              title={isAdmin ? "Click to edit" : ""}
+                            >
+                              {formatCurrency(payment.net_payable_amount)}
+                            </span>
+                          );
+                        })()}
                       </TableCell>
                       <TableCell className="text-center">
                         {payment.receipt_url ? (
@@ -483,6 +1177,68 @@ const InvestmentDetailPage = () => {
                         ) : (
                           <span className="text-muted-foreground text-sm">-</span>
                         )}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        {(() => {
+                          const isEditing = isAdmin && editingRemarks[payment.payment_id];
+                          
+                          if (isEditing) {
+                            return (
+                              <div className="flex items-center justify-center gap-1 min-w-[200px]">
+                                <Textarea
+                                  value={editingPayments[`${payment.payment_id}-remarks`] || payment.remarks || ''}
+                                  onChange={(e) => setEditingPayments(prev => ({ 
+                                    ...prev, 
+                                    [`${payment.payment_id}-remarks`]: e.target.value 
+                                  }))}
+                                  className="w-full min-h-[60px] text-sm"
+                                  placeholder="Enter remark..."
+                                  onBlur={() => {
+                                    const remark = editingPayments[`${payment.payment_id}-remarks`] || '';
+                                    handleSaveRemark(payment.payment_id, remark);
+                                  }}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                                      const remark = editingPayments[`${payment.payment_id}-remarks`] || '';
+                                      handleSaveRemark(payment.payment_id, remark);
+                                    } else if (e.key === 'Escape') {
+                                      setEditingRemarks(prev => {
+                                        const newState = { ...prev };
+                                        delete newState[payment.payment_id];
+                                        return newState;
+                                      });
+                                      setEditingPayments(prev => {
+                                        const newState = { ...prev };
+                                        delete newState[`${payment.payment_id}-remarks`];
+                                        return newState;
+                                      });
+                                    }
+                                  }}
+                                  autoFocus
+                                />
+                              </div>
+                            );
+                          }
+                          return (
+                            <div 
+                              className="cursor-pointer hover:bg-muted/50 rounded px-2 py-1 -mx-2 -my-1 min-w-[200px] max-w-[300px]"
+                              onClick={() => {
+                                if (isAdmin) {
+                                  setEditingRemarks(prev => ({ ...prev, [payment.payment_id]: true }));
+                                  setEditingPayments(prev => ({ 
+                                    ...prev, 
+                                    [`${payment.payment_id}-remarks`]: payment.remarks || '' 
+                                  }));
+                                }
+                              }}
+                              title={isAdmin ? "Click to edit" : ""}
+                            >
+                              <span className="text-sm text-muted-foreground">
+                                {payment.remarks || '-'}
+                              </span>
+                            </div>
+                          );
+                        })()}
                       </TableCell>
                     </TableRow>
                   ))}
