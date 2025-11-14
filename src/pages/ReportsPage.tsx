@@ -175,14 +175,19 @@ const ReportsPage = () => {
             agreement_url: inv.agreement_url || null
           }));
           
-          // Get all payments for this investor
-          const { data: paymentsData, error: paymentsError } = await (supabase as any)
-            .from('investor_quarterly_payments')
-            .select(`
-              *,
-              quarterly_roi_declarations!inner(roi_percentage)
-            `)
-            .eq('investor_id', investor.investor_id);
+          // Get all payments for this investor via investments
+          // First get all investment_ids for this investor
+          const investmentIds = investments.map((inv: any) => inv.investment_id);
+          
+          const { data: paymentsData, error: paymentsError } = investmentIds.length > 0
+            ? await (supabase as any)
+                .from('investor_quarterly_payments')
+                .select(`
+                  *,
+                  quarterly_roi_declarations!inner(roi_percentage)
+                `)
+                .in('investment_id', investmentIds)
+            : { data: [], error: null };
 
           if (paymentsError) throw paymentsError;
 
