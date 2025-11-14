@@ -66,7 +66,7 @@ const Navbar = () => {
     { title: 'Investments', path: '/', icon: Home },
     // Only show Reports for admin
     ...(isAdmin ? [
-    { title: 'Reports', path: '/reports', icon: FileText },
+    { title: 'Agreements', path: '/reports', icon: FileText },
     ] : []),
   ];
 
