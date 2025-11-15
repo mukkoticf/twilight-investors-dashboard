@@ -681,13 +681,17 @@ const PoolDetailsPage = () => {
                       <TableCell className="font-semibold text-green-600 text-center">
                         <div className="flex justify-center items-center gap-2">
                           <button
-                            onClick={() => navigate(`/investment/${investment.investment_id}`)}
+                            onClick={() => {
+                              window.open(`/investment/${investment.investment_id}`, '_blank');
+                            }}
                             className="text-green-600 hover:text-green-800 hover:underline cursor-pointer"
                           >
                             {formatCurrency(investment.investment_amount)}
                           </button>
                           <button
-                            onClick={() => navigate(`/investment/${investment.investment_id}`)}
+                            onClick={() => {
+                              window.open(`/investment/${investment.investment_id}`, '_blank');
+                            }}
                             className="text-green-600 hover:text-green-800 cursor-pointer p-1 rounded hover:bg-muted transition-colors"
                             title="View Investment Details"
                           >
