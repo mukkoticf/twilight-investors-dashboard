@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import PageLayout from '../components/layout/PageLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -12,7 +12,7 @@ import { usePageMetadata } from '@/hooks/use-page-metadata';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { formatDate } from '@/utils/crm-operations';
-import { FileText, Upload, Filter, TrendingUp, DollarSign, Users, Calendar, Loader2, CheckCircle2, Edit, Eye, ExternalLink, Download } from 'lucide-react';
+import { FileText, Upload, Filter, TrendingUp, DollarSign, Users, Calendar, Eye, ExternalLink, Download, Edit } from 'lucide-react';
 
 interface InvestorReport {
   investor_id: string;
@@ -82,15 +82,11 @@ const ReportsPage = () => {
   const [selectedPoolFilter, setSelectedPoolFilter] = useState<string>('');
   const [selectedInvestmentId, setSelectedInvestmentId] = useState<string | null>(null);
   const [availablePools, setAvailablePools] = useState<PoolInfo[]>([]);
-  const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [uploadFile, setUploadFile] = useState<File | null>(null);
-  const [showSuccessDialog, setShowSuccessDialog] = useState(false);
-  const [successMessage, setSuccessMessage] = useState('');
-  const [uploadedFileName, setUploadedFileName] = useState<string>('');
   const [viewAgreementUrl, setViewAgreementUrl] = useState<string | null>(null);
   const [isViewAgreementDialogOpen, setIsViewAgreementDialogOpen] = useState(false);
   const [selectedInvestorForUpload, setSelectedInvestorForUpload] = useState<InvestorReportWithPools | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   usePageMetadata({
     defaultTitle: "Investor Reports - Investment Performance",
@@ -400,33 +396,55 @@ const ReportsPage = () => {
     } else {
       setSelectedInvestmentId(null);
     }
-    setIsUploadDialogOpen(true);
+    // Directly trigger file input click
+    fileInputRef.current?.click();
   };
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      // Validate file type (PDF, images, etc.)
-      const validTypes = ['application/pdf', 'image/png', 'image/jpeg', 'image/jpg'];
-      if (!validTypes.includes(file.type)) {
-        toast.error('Invalid file type', {
-          description: 'Please upload a PDF or image file (PNG, JPEG, JPG)'
-        });
-        return;
+    if (!file || !selectedInvestorForUpload || !selectedPoolFilter) {
+      // Reset file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
       }
-      // Validate file size (max 10MB)
-      if (file.size > 10 * 1024 * 1024) {
-        toast.error('File too large', {
-          description: 'Please upload a file smaller than 10MB'
-        });
-        return;
+      return;
+    }
+
+    // Validate file type (PDF, images, etc.)
+    const validTypes = ['application/pdf', 'image/png', 'image/jpeg', 'image/jpg'];
+    if (!validTypes.includes(file.type)) {
+      toast.error('Invalid file type', {
+        description: 'Please upload a PDF or image file (PNG, JPEG, JPG)'
+      });
+      // Reset file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
       }
-      setUploadFile(file);
+      return;
+    }
+    // Validate file size (max 10MB)
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error('File too large', {
+        description: 'Please upload a file smaller than 10MB'
+      });
+      // Reset file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+      return;
+    }
+
+    // Directly upload the file
+    await handleDirectUpload(file);
+    
+    // Reset file input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
     }
   };
 
-  const handleUpload = async () => {
-    if (!uploadFile || !selectedPoolFilter || !selectedInvestorForUpload) {
+  const handleDirectUpload = async (file: File) => {
+    if (!selectedPoolFilter || !selectedInvestorForUpload) {
       toast.error('Please select a file');
       return;
     }
@@ -442,7 +460,7 @@ const ReportsPage = () => {
       }
 
       // Create a unique filename
-      const fileExt = uploadFile.name.split('.').pop();
+      const fileExt = file.name.split('.').pop();
       const fileName = `agreements/${selectedInvestorForUpload.investor_id}/${selectedPoolFilter}/${Date.now()}.${fileExt}`;
 
       let agreementUrl = '';
@@ -451,7 +469,7 @@ const ReportsPage = () => {
       try {
         const { data: uploadData, error: uploadError } = await supabase.storage
           .from('agreement_file')
-          .upload(fileName, uploadFile, {
+          .upload(fileName, file, {
             cacheControl: '3600',
             upsert: true // Allow overwriting if file exists
           });
@@ -476,7 +494,7 @@ const ReportsPage = () => {
             resolve(reader.result as string);
           };
           reader.onerror = reject;
-          reader.readAsDataURL(uploadFile);
+          reader.readAsDataURL(file);
         });
 
         agreementUrl = await base64Promise;
@@ -510,33 +528,17 @@ const ReportsPage = () => {
         throw updateError;
       }
 
-      // Close upload dialog and reset state immediately on success
-      setIsUploadDialogOpen(false);
+      // Reset state immediately on success
       setUploading(false);
+      const investorName = selectedInvestorForUpload.investor_name;
       setSelectedInvestorForUpload(null);
       setSelectedInvestmentId(null);
-
-      // Store filename for display
-      setUploadedFileName(uploadFile.name);
       
       // Refresh investor reports to get updated agreement_url
       await fetchInvestorReports();
-      
-      // Show success dialog for 3 seconds (but don't auto-close if user wants to edit)
-      const investorName = selectedInvestorForUpload?.investor_name || 'Investor';
-      setSuccessMessage(`Agreement has been saved for ${investorName} - ${selectedPool.pool_name}.`);
-      setShowSuccessDialog(true);
-
-      // Auto-close success dialog after 3 seconds (only if still open)
-      const timeoutId = setTimeout(() => {
-        setShowSuccessDialog(false);
-      }, 3000);
-      
-      // Store timeout ID so we can clear it if user clicks edit
-      (window as any).successDialogTimeout = timeoutId;
 
       toast.success('Agreement uploaded successfully', {
-        description: `Agreement has been saved for ${selectedInvestorForUpload.investor_name} - ${selectedPool.pool_name}.`
+        description: `Agreement has been saved for ${investorName} - ${selectedPool.pool_name}.`
       });
     } catch (error: any) {
       console.error('Error uploading agreement:', error);
@@ -651,15 +653,16 @@ const ReportsPage = () => {
                               {hasAgreement ? (
                                 <div className="flex items-center gap-2">
                                   <Button 
-                                    variant="outline" 
+                                    variant="ghost" 
                                     size="sm"
+                                    className="h-8 w-8 p-0"
                                     onClick={() => {
                                       setViewAgreementUrl(investment.agreement_url!);
                                       setIsViewAgreementDialogOpen(true);
                                     }}
+                                    title="View Agreement"
                                   >
-                                    <Eye className="h-4 w-4 mr-2" />
-                                    View Agreement
+                                    <Eye className="h-4 w-4" />
                                   </Button>
                                   <Button 
                                     variant="ghost" 
@@ -676,6 +679,7 @@ const ReportsPage = () => {
                                   variant="outline" 
                                   size="sm"
                                   onClick={() => handleUploadAgreement(investor, investment.purchase_id, investment.investment_id)}
+                                  disabled={uploading}
                                 >
                                   <Upload className="h-4 w-4 mr-2" />
                                   Upload Agreement
@@ -823,120 +827,16 @@ const ReportsPage = () => {
           </Card>
         )}
 
-        {/* Upload Agreement Dialog */}
-        <Dialog open={isUploadDialogOpen} onOpenChange={(open) => {
-          setIsUploadDialogOpen(open);
-          if (!open) {
-            setSelectedInvestmentId(null);
-            setUploadFile(null);
-          }
-        }}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <Upload className="h-5 w-5" />
-                Upload Agreement for Pool
-              </DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Input
-                  id="agreement-file"
-                  type="file"
-                  accept=".pdf,.png,.jpg,.jpeg"
-                  onChange={handleFileSelect}
-                  disabled={uploading}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Supported formats: PDF, PNG, JPEG, JPG (Max 10MB)
-                </p>
-                {uploadFile && (
-                  <div className="mt-2 p-2 bg-muted rounded-md">
-                    <p className="text-sm text-muted-foreground">{uploadFile.name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {(uploadFile.size / 1024 / 1024).toFixed(2)} MB
-                    </p>
-                  </div>
-                )}
-              </div>
-            </div>
-            <DialogFooter>
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setIsUploadDialogOpen(false);
-                  setSelectedInvestmentId(null);
-                  setUploadFile(null);
-                }}
-                disabled={uploading}
-              >
-                Cancel
-              </Button>
-              <Button
-                onClick={handleUpload}
-                disabled={!uploadFile || uploading || !selectedPoolFilter}
-              >
-                {uploading ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Uploading...
-                  </>
-                ) : (
-                  <>
-                    <Upload className="mr-2 h-4 w-4" />
-                    Upload Agreement
-                  </>
-                )}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+        {/* Hidden file input for direct upload */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".pdf,.png,.jpg,.jpeg"
+          onChange={handleFileSelect}
+          disabled={uploading}
+          style={{ display: 'none' }}
+        />
 
-        {/* Success Notification - Bottom Right */}
-        {showSuccessDialog && (
-          <div className="fixed bottom-4 right-4 z-50 animate-in slide-in-from-bottom-2 fade-in-0 sm:max-w-md">
-            <div className="bg-background border rounded-lg shadow-lg p-4">
-              <div className="flex items-start gap-3">
-                <div className="w-10 h-10 bg-green-100 dark:bg-green-900/20 rounded-full flex items-center justify-center flex-shrink-0">
-                  <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <h4 className="font-semibold text-sm">Agreement Uploaded</h4>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    {successMessage}
-                  </p>
-                  {uploadedFileName && (
-                    <div className="mt-2 flex items-center gap-2">
-                      <FileText className="h-3 w-3 text-muted-foreground" />
-                      <span className="text-xs text-muted-foreground truncate">
-                        {uploadedFileName}
-                      </span>
-                    </div>
-                  )}
-                </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 w-8 p-0 flex-shrink-0"
-                  onClick={() => {
-                    // Clear auto-close timeout
-                    if ((window as any).successDialogTimeout) {
-                      clearTimeout((window as any).successDialogTimeout);
-                    }
-                    // Close success notification
-                    setShowSuccessDialog(false);
-                    // Reopen upload dialog
-                    setIsUploadDialogOpen(true);
-                    setUploadFile(null);
-                  }}
-                  title="Edit/Replace Agreement"
-                >
-                  <Edit className="h-4 w-4" />
-                </Button>
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* View Agreement Dialog */}
         <Dialog open={isViewAgreementDialogOpen} onOpenChange={setIsViewAgreementDialogOpen}>

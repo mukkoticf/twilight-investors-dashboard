@@ -315,7 +315,13 @@ const InvestmentDetailPage = () => {
             <Button 
               variant="outline" 
               size="sm" 
-              onClick={() => navigate(-1)}
+              onClick={() => {
+                if (investment?.purchase_id) {
+                  navigate(`/pools/${investment.purchase_id}`);
+                } else {
+                  navigate('/');
+                }
+              }}
               className="flex items-center gap-2"
             >
               <ArrowLeft className="h-4 w-4" />
@@ -323,13 +329,15 @@ const InvestmentDetailPage = () => {
             </Button>
             <div>
               <h1 className="text-3xl font-bold">Investment Details</h1>
-              {isAdmin && (
-                <p className="text-muted-foreground">
-                  {investment.investor_name} - {investment.pool_name}
-                </p>
-              )}
             </div>
           </div>
+          <Card className="w-full md:w-auto bg-blue-50 border-blue-200">
+            <CardContent className="p-3 md:p-4">
+              <p className="text-base md:text-2xl font-bold break-words text-left md:text-right text-blue-600">
+                {investment.investor_name}
+              </p>
+            </CardContent>
+          </Card>
         </div>
 
         {/* Investment Summary */}
