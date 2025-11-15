@@ -628,7 +628,7 @@ const PoolDetailsPage = () => {
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
                   <Input
                     type="text"
-                    placeholder="Search by investor name..."
+                    placeholder="Search by investor or associate name..."
                     value={investorSearchFilter}
                     onChange={(e) => setInvestorSearchFilter(e.target.value)}
                     className="pl-10 placeholder:text-black-600"
@@ -663,9 +663,12 @@ const PoolDetailsPage = () => {
                 </TableHeader>
                 <TableBody>
                   {investorInvestments
-                    .filter((investment) => 
-                      investment.investor_name.toLowerCase().includes(investorSearchFilter.toLowerCase())
-                    )
+                    .filter((investment) => {
+                      const searchTerm = investorSearchFilter.toLowerCase();
+                      const investorName = investment.investor_name?.toLowerCase() || '';
+                      const associateName = investment.associate_name?.toLowerCase() || '';
+                      return investorName.includes(searchTerm) || associateName.includes(searchTerm);
+                    })
                     .map((investment) => (
                     <TableRow key={investment.investment_id}>
                       <TableCell className="font-medium text-center">
