@@ -33,6 +33,7 @@ interface InvestorInvestment {
   total_cost: number;
   status: 'Active' | 'Inactive' | 'Sold';
   agreement_url?: string | null;
+  exited_amount?: number;
 }
 
 const InvestorDetailPage = () => {
@@ -66,9 +67,9 @@ const InvestorDetailPage = () => {
   const fetchInvestorDetails = async () => {
     try {
       setLoading(true);
-      
+
       console.log('Fetching investor details for investor_id:', investorId);
-      
+
       const { data: investorData, error: investorError } = await (supabase as any)
         .from('investors')
         .select('*')
@@ -102,14 +103,24 @@ const InvestorDetailPage = () => {
   const fetchInvestorInvestments = async () => {
     try {
       setInvestmentsLoading(true);
-      
+
       console.log('Fetching investments for investor_id:', investorId);
-      
-      // First, try to fetch investments directly
-      const { data: investmentsData, error: investmentsError } = await (supabase as any)
+
+      // Fetch investments - handle missing exited_amount column gracefully
+      let investmentsData: any[];
+      let investmentsError: any;
+
+      // First, try to fetch without exited_amount (since it might not exist)
+      const result = await (supabase as any)
         .from('investor_investments')
         .select(`
-          *,
+          investment_id,
+          investor_id,
+          purchase_id,
+          investment_amount,
+          investment_percentage,
+          created_at,
+          agreement_url,
           company_pools:purchase_id (
             pool_name,
             total_cost,
@@ -119,23 +130,76 @@ const InvestorDetailPage = () => {
         .eq('investor_id', investorId)
         .order('created_at', { ascending: false });
 
+      investmentsData = result.data;
+      investmentsError = result.error;
+
       if (investmentsError) {
         console.error('Investments query error:', investmentsError);
         throw investmentsError;
+      }
+
+      // Now try to get exited_amounts for each investment (if column exists)
+      if (investmentsData && investmentsData.length > 0) {
+        const investmentIds = investmentsData.map((inv: any) => inv.investment_id);
+        
+        try {
+          const exitedDataResult = await (supabase as any)
+            .from('investor_investments')
+            .select('investment_id, exited_amounts')
+            .in('investment_id', investmentIds);
+
+          if (exitedDataResult.data) {
+            // Create a map of investment_id -> exited_amounts
+            const exitedMap = new Map();
+            exitedDataResult.data.forEach((item: any) => {
+              exitedMap.set(item.investment_id, item.exited_amounts);
+            });
+
+            // Merge exited_amounts into investmentsData
+            investmentsData = investmentsData.map((inv: any) => ({
+              ...inv,
+              exited_amounts: exitedMap.get(inv.investment_id) || null
+            }));
+          }
+        } catch (e: any) {
+          // Column doesn't exist - that's okay
+          console.log('exited_amounts column not available');
+        }
       }
 
       console.log('Raw investments data:', investmentsData);
       console.log('Number of investments found:', investmentsData?.length || 0);
 
       // Transform the data to flatten the pool information
-      // Note: agreement_url comes directly from investor_investments, not from company_pools
-      const transformedData = investmentsData?.map((investment: any) => ({
-        ...investment,
-        pool_name: investment.company_pools?.pool_name || 'Unknown Pool',
-        total_cost: investment.company_pools?.total_cost || 0,
-        status: investment.company_pools?.status || 'Unknown',
-        agreement_url: investment.agreement_url || null // Get from investor_investments directly
-      })) || [];
+      // Calculate exited_amount from exited_amounts if available
+      const transformedData = investmentsData?.map((investment: any) => {
+        // Calculate total exited amount from exited_amounts array
+        let exitedAmount = 0;
+        if (investment.exited_amounts) {
+          try {
+            const exitedAmounts = Array.isArray(investment.exited_amounts) 
+              ? investment.exited_amounts 
+              : (typeof investment.exited_amounts === 'string' 
+                  ? JSON.parse(investment.exited_amounts) 
+                  : investment.exited_amounts);
+            
+            if (Array.isArray(exitedAmounts)) {
+              exitedAmount = exitedAmounts.reduce((sum: number, exit: any) => sum + (exit?.amount || 0), 0);
+            }
+          } catch (e) {
+            console.error('Error parsing exited_amounts:', e);
+          }
+        }
+
+        return {
+          ...investment,
+          pool_name: investment.company_pools?.pool_name || 'Unknown Pool',
+          total_cost: investment.company_pools?.total_cost || 0,
+          status: investment.company_pools?.status || 'Unknown',
+          agreement_url: investment.agreement_url || null,
+          exited_amount: exitedAmount // Calculate from exited_amounts
+        };
+      }) || [];
 
       console.log('Transformed investments data:', transformedData);
       setInvestments(transformedData);
@@ -170,7 +234,7 @@ const InvestorDetailPage = () => {
       'Inactive': 'secondary',
       'Sold': 'destructive'
     } as const;
-    
+
     return (
       <Badge variant={variants[status as keyof typeof variants] || 'secondary'}>
         {status}
@@ -179,6 +243,7 @@ const InvestorDetailPage = () => {
   };
 
   const totalInvestedAmount = investments.reduce((sum, investment) => sum + investment.investment_amount, 0);
+  const totalExitedAmount = investments.reduce((sum, investment) => sum + (investment.exited_amount || 0), 0);
   const totalPoolsInvested = investments.length;
 
   const handleViewAgreement = (agreementUrl: string | null | undefined) => {
@@ -226,14 +291,14 @@ const InvestorDetailPage = () => {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <Button 
-              variant="outline" 
-              size="sm" 
+            <Button
+              variant="outline"
+              size="sm"
               onClick={() => navigate('/')}
               className="flex items-center gap-2"
             >
               <ArrowLeft className="h-4 w-4" />
-             
+
             </Button>
             <div>
               <h1 className="text-3xl font-bold">{investor.investor_name}</h1>
@@ -263,6 +328,18 @@ const InvestorDetailPage = () => {
                 <p className="text-2xl font-bold text-green-600">{formatCurrency(totalInvestedAmount)}</p>
                 <p className="text-xs text-muted-foreground">
                   Across all pools
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="min-w-fit flex-1 max-w-md">
+            <CardContent className="p-5">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Total Amount Exited</p>
+                <p className="text-2xl font-bold text-orange-600">{formatCurrency(totalExitedAmount)}</p>
+                <p className="text-xs text-muted-foreground">
+                  Withdrawn capital
                 </p>
               </div>
             </CardContent>
@@ -297,6 +374,7 @@ const InvestorDetailPage = () => {
                   <TableRow>
                     <TableHead>Pool Name</TableHead>
                     <TableHead>Investment Amount</TableHead>
+                    <TableHead>Exited Amount</TableHead>
                     <TableHead>Pool Status</TableHead>
                     <TableHead>Investment Date</TableHead>
                     <TableHead>Actions</TableHead>
@@ -328,8 +406,13 @@ const InvestorDetailPage = () => {
                             onClick={() => navigate(`/investment/${investment.investment_id}`)}
                             className="text-green-600 hover:text-green-800 hover:underline cursor-pointer"
                           >
-                            {formatCurrency(investment.investment_amount)}
+                            {formatCurrency(investment.investment_amount - (investment.exited_amount || 0))}
                           </button>
+                          {investment.exited_amount && investment.exited_amount > 0 && (
+                            <span className="text-xs text-muted-foreground ml-1">
+                              {/* (Init: {formatCurrency(investment.investment_amount)}) */}
+                            </span>
+                          )}
                           <button
                             onClick={() => navigate(`/investment/${investment.investment_id}`)}
                             className="text-green-600 hover:text-green-800 cursor-pointer p-1 rounded hover:bg-green-50 transition-colors"
@@ -338,6 +421,9 @@ const InvestorDetailPage = () => {
                             <Eye className="h-4 w-4" />
                           </button>
                         </div>
+                      </TableCell>
+                      <TableCell className="font-semibold text-orange-600">
+                        {investment.exited_amount && investment.exited_amount > 0 ? formatCurrency(investment.exited_amount) : '-'}
                       </TableCell>
                       <TableCell>
                         {getStatusBadge(investment.status)}

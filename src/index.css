@@ -1,4 +1,3 @@
-
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
 @tailwind base;
@@ -96,7 +95,12 @@
     @apply bg-background text-foreground font-sans antialiased;
   }
 
-  h1, h2, h3, h4, h5, h6 {
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
     @apply font-heading font-medium tracking-tight;
   }
 
@@ -114,61 +118,62 @@
 }
 
 @layer components {
+
   /* Glass UI components */
   .glass {
     @apply bg-white/80 backdrop-blur-md border border-white/20 shadow-glass;
   }
-  
+
   .glass-hover {
     @apply hover:shadow-glass-hover transition-shadow duration-300;
   }
-  
+
   .card-hover {
     @apply hover:shadow-card-hover transition-all duration-300 ease-in-out transform hover:-translate-y-1;
   }
-  
+
   /* Dashboard cards */
   .dashboard-card {
     @apply bg-white rounded-xl shadow-card p-5 border border-border/50;
   }
-  
+
   /* Stat cards */
   .stat-card {
     @apply dashboard-card flex flex-col justify-between;
   }
-  
+
   .stat-value {
     @apply text-2xl font-semibold text-foreground;
   }
-  
+
   .stat-label {
     @apply text-sm font-medium text-muted-foreground;
   }
-  
+
   /* Smooth transitions */
   .page-transition {
     @apply transition-all duration-300 ease-in-out;
   }
-  
+
   /* Interactive elements */
   .interactive {
     @apply transition-all duration-200 hover:brightness-105 active:brightness-95;
   }
-  
+
   /* Navigation links */
   .nav-link {
     @apply relative px-3 py-2 text-foreground/80 rounded-md transition-colors hover:text-foreground hover:bg-muted;
   }
-  
+
   .nav-link.active {
     @apply text-primary font-medium bg-primary/10;
   }
-  
+
   /* Drag and drop zone */
   .drop-zone {
     @apply border-2 border-dashed border-border rounded-lg p-4 text-center cursor-pointer transition-colors hover:border-primary/50 hover:bg-primary/5;
   }
-  
+
   /* Form inputs with consistent styling */
   .form-input {
     @apply rounded-md border border-input px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring;
@@ -176,46 +181,47 @@
 }
 
 @layer utilities {
+
   /* Custom scrollbar */
   .custom-scrollbar {
     @apply scrollbar-thin scrollbar-thumb-primary/20 scrollbar-track-transparent hover:scrollbar-thumb-primary/30;
   }
-  
+
   /* Text gradients */
   .text-gradient {
     @apply bg-gradient-to-r from-primary to-primary bg-clip-text text-transparent;
   }
-  
+
   /* Util for perfect centering */
   .center {
     @apply flex items-center justify-center;
   }
-  
+
   /* Pill badge */
   .badge {
     @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold;
   }
-  
+
   .badge-primary {
     @apply badge bg-primary/10 text-primary;
   }
-  
+
   .badge-secondary {
     @apply badge bg-secondary/10 text-secondary;
   }
-  
+
   .badge-accent {
     @apply badge bg-accent/10 text-accent-foreground;
   }
-  
+
   .badge-success {
     @apply badge bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300;
   }
-  
+
   .badge-warning {
     @apply badge bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300;
   }
-  
+
   .badge-danger {
     @apply badge bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300;
   }
@@ -242,4 +248,16 @@
 
 .hover-lift {
   @apply transition-transform duration-300 ease-out hover:-translate-y-1;
+}
+
+/* Hide number input spinners */
+input[type=number]::-webkit-inner-spin-button,
+input[type=number]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  appearance: none;
+  margin: 0;
+}
+
+input[type=number] {
+  -moz-appearance: textfield;
 }
