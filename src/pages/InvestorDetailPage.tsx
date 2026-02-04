@@ -108,7 +108,6 @@ const InvestorDetailPage = () => {
 
       // Fetch investments - handle missing exited_amount column gracefully
       let investmentsData: any[];
-      let investmentsError: any;
 
       // First, try to fetch without exited_amount (since it might not exist)
       const result = await (supabase as any)
@@ -131,7 +130,7 @@ const InvestorDetailPage = () => {
         .order('created_at', { ascending: false });
 
       investmentsData = result.data;
-      investmentsError = result.error;
+      const investmentsError = result.error;
 
       if (investmentsError) {
         console.error('Investments query error:', investmentsError);

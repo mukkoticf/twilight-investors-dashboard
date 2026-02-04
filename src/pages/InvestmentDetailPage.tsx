@@ -184,7 +184,7 @@ const InvestmentDetailPage = () => {
       console.log('Raw payments data:', paymentsData);
 
       // Fetch declarations separately if we have payments
-      let declarationsMap = new Map();
+      const declarationsMap = new Map();
       if (paymentsData && paymentsData.length > 0) {
         const declarationIds = [...new Set(paymentsData.map((p: any) => p.declaration_id))];
         
@@ -301,7 +301,7 @@ const InvestmentDetailPage = () => {
       
       // Calculate net_payable_amount if other fields are being updated
       // Formula: net_payout = quarter_payout - emergency_fund_deduction + (FD Returns if present); final_payout = net_payout - TDS
-      let updateData: any = { [field]: value };
+      const updateData: any = { [field]: value };
       if (field === 'fd_returns') {
         const fdVal = value === '' || value == null || Number.isNaN(Number(value)) ? null : Number(value);
         updateData.fd_returns = fdVal;
