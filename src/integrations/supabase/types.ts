@@ -196,6 +196,7 @@ export type Database = {
           declaration_id: string
           gross_roi_amount: number
           emergency_fund_deduction: number
+          fd_returns: number | null
           tds_deduction: number
           net_payable_amount: number
           payment_status: 'Pending' | 'Paid' | 'Failed'
@@ -211,6 +212,7 @@ export type Database = {
           declaration_id: string
           gross_roi_amount: number
           emergency_fund_deduction: number
+          fd_returns?: number | null
           tds_deduction: number
           net_payable_amount: number
           payment_status?: 'Pending' | 'Paid' | 'Failed'
@@ -226,6 +228,7 @@ export type Database = {
           declaration_id?: string
           gross_roi_amount?: number
           emergency_fund_deduction?: number
+          fd_returns?: number | null
           tds_deduction?: number
           net_payable_amount?: number
           payment_status?: 'Pending' | 'Paid' | 'Failed'
