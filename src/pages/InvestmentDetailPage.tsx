@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { ArrowLeft, DollarSign, TrendingUp, Calendar, Building, User, Eye, Save, X, Plus } from 'lucide-react';
+import { ArrowLeft, DollarSign, TrendingUp, Calendar, Building, User, Eye, Save, X, Plus, Pencil } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { usePageMetadata } from '@/hooks/use-page-metadata';
 import { supabase } from '@/integrations/supabase/client';
@@ -28,6 +28,8 @@ interface InvestmentDetail {
   pool_name: string;
   total_cost: number;
   status: 'Active' | 'Inactive' | 'Sold';
+  exited_amount?: number;
+  exited_amounts?: unknown;
 }
 
 interface QuarterlyPayment {
@@ -68,6 +70,9 @@ const InvestmentDetailPage = () => {
   // Editing states
   const [editingInvestmentAmount, setEditingInvestmentAmount] = useState(false);
   const [investmentAmountValue, setInvestmentAmountValue] = useState<string>('');
+  const [editingExitedAmount, setEditingExitedAmount] = useState(false);
+  const [exitedAmountValue, setExitedAmountValue] = useState<string>('');
+  const [exitedDateValue, setExitedDateValue] = useState<string>(() => new Date().toISOString().slice(0, 10));
   const [editingPayments, setEditingPayments] = useState<{ [key: string]: any }>({});
   const [editingRemarks, setEditingRemarks] = useState<{ [key: string]: boolean }>({});
   const [saving, setSaving] = useState<string | null>(null);
@@ -141,13 +146,31 @@ const InvestmentDetailPage = () => {
 
       if (investmentError) throw investmentError;
 
+      // Compute exited_amount from exited_amounts if present
+      let exitedAmount = 0;
+      const rawExited = investmentData.exited_amounts;
+      if (rawExited) {
+        try {
+          const arr = Array.isArray(rawExited)
+            ? rawExited
+            : (typeof rawExited === 'string' ? JSON.parse(rawExited) : rawExited);
+          if (Array.isArray(arr)) {
+            exitedAmount = arr.reduce((sum: number, exit: { amount?: number }) => sum + (exit?.amount ?? 0), 0);
+          }
+        } catch {
+          // ignore parse errors
+        }
+      }
+
       // Transform the data to flatten the related information
       const transformedData = {
         ...investmentData,
         investor_name: investmentData.investors?.investor_name || 'Unknown',
         pool_name: investmentData.company_pools?.pool_name || 'Unknown Pool',
         total_cost: investmentData.company_pools?.total_cost || 0,
-        status: investmentData.company_pools?.status || 'Unknown'
+        status: investmentData.company_pools?.status || 'Unknown',
+        exited_amount: exitedAmount,
+        exited_amounts: rawExited ?? null
       };
 
       console.log('Investment data loaded:', transformedData);
@@ -287,6 +310,69 @@ const InvestmentDetailPage = () => {
     } catch (error: any) {
       console.error('Error updating investment amount:', error);
       toast.error('Failed to update investment amount');
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  // Parse exited_amounts to array of { amount, date? }
+  const getExitedEntries = (): { amount: number; date?: string }[] => {
+    const raw = investment?.exited_amounts;
+    if (!raw) return [];
+    try {
+      const arr = Array.isArray(raw) ? raw : (typeof raw === 'string' ? JSON.parse(raw) : raw);
+      if (!Array.isArray(arr)) return [];
+      return arr.map((e: { amount?: number; date?: string }) => ({
+        amount: Number(e?.amount) || 0,
+        date: e?.date || undefined
+      })).filter(e => e.amount > 0);
+    } catch {
+      return [];
+    }
+  };
+
+  // Append a new exit entry (amount + date) to exited_amounts and deduct from investment_amount (remaining capital)
+  const handleSaveExitedAmount = async () => {
+    if (!investment || !isAdmin) return;
+    const amount = parseNumber(exitedAmountValue);
+    if (amount <= 0) {
+      toast.error('Amount must be greater than 0');
+      return;
+    }
+    const currentRemaining = Number(investment.investment_amount);
+    if (amount > currentRemaining) {
+      toast.error(`Exited amount cannot exceed remaining investment (${formatCurrency(currentRemaining)})`);
+      return;
+    }
+    const date = exitedDateValue || new Date().toISOString().slice(0, 10);
+    try {
+      setSaving('exited_amount');
+      const existing = getExitedEntries();
+      const payload = [...existing, { amount, date }];
+      const newRemaining = currentRemaining - amount;
+      const { error } = await (supabase as any)
+        .from('investor_investments')
+        .update({
+          exited_amounts: payload,
+          investment_amount: newRemaining
+        })
+        .eq('investment_id', investment.investment_id);
+      if (error) throw error;
+      const newTotal = payload.reduce((s, e) => s + e.amount, 0);
+      setInvestment(prev => prev ? {
+        ...prev,
+        investment_amount: newRemaining,
+        exited_amount: newTotal,
+        exited_amounts: payload
+      } : null);
+      setInvestmentAmountValue(String(newRemaining));
+      setEditingExitedAmount(false);
+      setExitedAmountValue('');
+      setExitedDateValue(new Date().toISOString().slice(0, 10));
+      toast.success('Exit record added; investment amount updated');
+    } catch (err: any) {
+      console.error('Error adding exit:', err);
+      toast.error(err?.message || 'Failed to add exit');
     } finally {
       setSaving(null);
     }
@@ -626,7 +712,7 @@ const InvestmentDetailPage = () => {
         </div>
 
         {/* Investment Summary */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium">Investment Amount</CardTitle>
@@ -667,6 +753,76 @@ const InvestmentDetailPage = () => {
                 >
                   {formatCurrency(investment.investment_amount)}
                 </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium flex items-center gap-1.5">
+                Exited Amount
+                {isAdmin && !editingExitedAmount && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingExitedAmount(true);
+                      setExitedAmountValue('');
+                      setExitedDateValue(new Date().toISOString().slice(0, 10));
+                    }}
+                    className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground"
+                    title="Add exit record"
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {isAdmin && editingExitedAmount ? (
+                <div className="space-y-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Input
+                      type="number"
+                      min={0}
+                      step={1}
+                      placeholder="Amount"
+                      value={exitedAmountValue}
+                      onChange={(e) => setExitedAmountValue(e.target.value)}
+                      className="text-lg font-semibold text-orange-600 h-9 w-28"
+                      autoFocus
+                    />
+                    <Input
+                      type="date"
+                      value={exitedDateValue}
+                      onChange={(e) => setExitedDateValue(e.target.value)}
+                      className="h-9 w-36"
+                    />
+                    <Button
+                      size="sm"
+                      onClick={handleSaveExitedAmount}
+                      disabled={saving === 'exited_amount' || !exitedAmountValue.trim()}
+                    >
+                      <Save className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        setEditingExitedAmount(false);
+                        setExitedAmountValue('');
+                      }}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">Adds this exit to the list (amount + date).</p>
+                </div>
+              ) : (
+                <>
+                  <div className="text-2xl font-bold text-orange-600">
+                    {formatCurrency(investment.exited_amount ?? 0)}
+                  </div>
+                </>
               )}
             </CardContent>
           </Card>
