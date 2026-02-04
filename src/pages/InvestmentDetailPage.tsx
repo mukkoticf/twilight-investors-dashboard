@@ -36,6 +36,7 @@ interface QuarterlyPayment {
   declaration_id: string;
   gross_roi_amount: number;
   emergency_fund_deduction: number;
+  fd_returns: number | null;
   tds_deduction: number;
   net_payable_amount: number;
   payment_status: 'Pending' | 'Paid' | 'Failed';
@@ -78,6 +79,7 @@ const InvestmentDetailPage = () => {
     declaration_id: '',
     gross_roi_amount: '',
     emergency_fund_deduction: '',
+    fd_returns: '',
     tds_deduction: '',
     net_payable_amount: '',
     payment_status: 'Paid' as 'Pending' | 'Paid' | 'Failed',
@@ -217,9 +219,9 @@ const InvestmentDetailPage = () => {
         const declaration = declarationsMap.get(payment.declaration_id);
         const quarterYear = declaration?.quarter_year || 'Q1-2024';
         const [quarter, year] = quarterYear.split('-');
-        
         return {
           ...payment,
+          fd_returns: payment.fd_returns ?? null,
           quarter: quarter || 'Q1',
           year: parseInt(year) || new Date().getFullYear(),
           quarter_year: quarterYear,
@@ -290,25 +292,32 @@ const InvestmentDetailPage = () => {
     }
   };
 
-  // Save payment field
-  const handleSavePaymentField = async (paymentId: string, field: string, value: number) => {
+  // Save payment field (value can be number or '' for fd_returns when clearing)
+  const handleSavePaymentField = async (paymentId: string, field: string, value: number | string) => {
     if (!isAdmin) return;
 
     try {
       setSaving(`${paymentId}-${field}`);
       
       // Calculate net_payable_amount if other fields are being updated
+      // Formula: net_payout = quarter_payout - emergency_fund_deduction + (FD Returns if present); final_payout = net_payout - TDS
       let updateData: any = { [field]: value };
-      
-      if (field === 'gross_roi_amount' || field === 'emergency_fund_deduction' || field === 'tds_deduction') {
+      if (field === 'fd_returns') {
+        const fdVal = value === '' || value == null || Number.isNaN(Number(value)) ? null : Number(value);
+        updateData.fd_returns = fdVal;
+      }
+
+      if (field === 'gross_roi_amount' || field === 'emergency_fund_deduction' || field === 'fd_returns' || field === 'tds_deduction') {
         const payment = quarterlyPayments.find(p => p.payment_id === paymentId);
         if (payment) {
-          const grossRoi = field === 'gross_roi_amount' ? value : payment.gross_roi_amount;
-          const emergencyFund = field === 'emergency_fund_deduction' ? value : payment.emergency_fund_deduction;
-          const tds = field === 'tds_deduction' ? value : payment.tds_deduction;
-          
-          const afterEmergency = grossRoi - emergencyFund;
-          const netPayable = afterEmergency - tds;
+          const grossRoi = field === 'gross_roi_amount' ? Number(value) : payment.gross_roi_amount;
+          const emergencyFund = field === 'emergency_fund_deduction' ? Number(value) : payment.emergency_fund_deduction;
+          const fdReturns = field === 'fd_returns'
+            ? (value === '' || value == null || Number.isNaN(Number(value)) ? 0 : Number(value))
+            : (payment.fd_returns ?? 0);
+          const tds = field === 'tds_deduction' ? Number(value) : payment.tds_deduction;
+          const netPayout = grossRoi - emergencyFund + fdReturns;
+          const netPayable = netPayout - tds;
           updateData.net_payable_amount = Math.max(0, netPayable);
         }
       }
@@ -419,13 +428,22 @@ const InvestmentDetailPage = () => {
     try {
       setSaving('new-payment');
       
+      const grossRoi = parseFloat(newPayment.gross_roi_amount) || 0;
+      const emergencyFund = parseFloat(newPayment.emergency_fund_deduction) || 0;
+      const fdReturnsRaw = newPayment.fd_returns.trim();
+      const fdReturns = fdReturnsRaw === '' ? null : parseFloat(fdReturnsRaw) || 0;
+      const tds = parseFloat(newPayment.tds_deduction) || 0;
+      const netPayout = grossRoi - emergencyFund + (fdReturns ?? 0);
+      const netPayable = Math.max(0, netPayout - tds);
+
       const paymentData = {
         investment_id: investment.investment_id,
         declaration_id: newPayment.declaration_id,
-        gross_roi_amount: parseFloat(newPayment.gross_roi_amount) || 0,
-        emergency_fund_deduction: parseFloat(newPayment.emergency_fund_deduction) || 0,
-        tds_deduction: parseFloat(newPayment.tds_deduction) || 0,
-        net_payable_amount: parseFloat(newPayment.net_payable_amount) || 0,
+        gross_roi_amount: grossRoi,
+        emergency_fund_deduction: emergencyFund,
+        fd_returns: fdReturns,
+        tds_deduction: tds,
+        net_payable_amount: netPayable,
         payment_status: newPayment.payment_status,
         payment_date: newPayment.payment_date || null,
         remarks: newPayment.remarks || null
@@ -444,6 +462,7 @@ const InvestmentDetailPage = () => {
         declaration_id: '',
         gross_roi_amount: '',
         emergency_fund_deduction: '',
+        fd_returns: '',
         tds_deduction: '',
         net_payable_amount: '',
         payment_status: 'Paid',
@@ -755,6 +774,19 @@ const InvestmentDetailPage = () => {
                           />
                         </div>
                       </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="fd_returns">FD Returns (optional)</Label>
+                        <Input
+                          id="fd_returns"
+                          type="number"
+                          step="0.01"
+                          value={newPayment.fd_returns}
+                          onChange={(e) => setNewPayment(prev => ({ ...prev, fd_returns: e.target.value }))}
+                          placeholder="0 or leave blank"
+                        />
+                        <p className="text-xs text-muted-foreground">Net payout = Payout − Emergency Fund + FD Returns; Final = Net payout − TDS</p>
+                      </div>
                       
                       <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">
@@ -831,6 +863,7 @@ const InvestmentDetailPage = () => {
                               declaration_id: '',
                               gross_roi_amount: '',
                               emergency_fund_deduction: '',
+                              fd_returns: '',
                               tds_deduction: '',
                               net_payable_amount: '',
                               payment_status: 'Paid',
@@ -895,6 +928,7 @@ const InvestmentDetailPage = () => {
                     <TableHead className="text-center">Quarterly Return %</TableHead>
                     <TableHead className="text-center">Payout</TableHead>
                     <TableHead className="text-center">Emergency Fund Ded.</TableHead>
+                    <TableHead className="text-center">FD Returns</TableHead>
                     <TableHead className="text-center">TDS Ded.</TableHead>
                     <TableHead className="text-center">Net Payable Amount</TableHead>
                     <TableHead className="text-center">Receipt</TableHead>
@@ -921,7 +955,8 @@ const InvestmentDetailPage = () => {
                           const editingKey = `${payment.payment_id}-roi_percentage`;
                           const isEditing = isAdmin && editingPayments[editingKey] !== undefined;
                           const roiPercent = investment ? ((payment.gross_roi_amount / investment.investment_amount) * 100) : payment.roi_percentage;
-                          
+                          const declaredRoi = payment.roi_percentage ?? 0;
+                          const showDeclared = declaredRoi > 0 && Math.abs(declaredRoi - roiPercent) > 0.01;
                           if (isEditing) {
                             return (
                               <div className="flex items-center justify-center gap-1">
@@ -958,14 +993,21 @@ const InvestmentDetailPage = () => {
                             );
                           }
                           return (
-                            <Badge 
-                              variant="outline" 
-                              className="text-purple-600 cursor-pointer hover:bg-muted/50"
-                              onClick={() => isAdmin && startEditingPayment(payment.payment_id, 'roi_percentage', roiPercent)}
-                              title={isAdmin ? "Click to edit" : ""}
-                            >
-                              {roiPercent.toFixed(2)}%
-                            </Badge>
+                            <div className="flex flex-col items-center gap-0.5">
+                              <Badge 
+                                variant="outline" 
+                                className="text-purple-600 cursor-pointer hover:bg-muted/50"
+                                onClick={() => isAdmin && startEditingPayment(payment.payment_id, 'roi_percentage', roiPercent)}
+                                title={isAdmin ? "Click to edit (Payout ÷ Investment)" : "Effective: Payout ÷ Investment"}
+                              >
+                                {roiPercent.toFixed(2)}%
+                              </Badge>
+                              {showDeclared && (
+                                <span className="text-xs text-muted-foreground" title="Declared pool ROI for this quarter">
+                                  Declared: {declaredRoi.toFixed(2)}%
+                                </span>
+                              )}
+                            </div>
                           );
                         })()}
                       </TableCell>
@@ -1061,6 +1103,57 @@ const InvestmentDetailPage = () => {
                               title={isAdmin ? "Click to edit" : ""}
                             >
                               {formatCurrency(payment.emergency_fund_deduction)}
+                            </span>
+                          );
+                        })()}
+                      </TableCell>
+                      <TableCell className="font-semibold text-center">
+                        {(() => {
+                          const editingKey = `${payment.payment_id}-fd_returns`;
+                          const isEditing = isAdmin && editingPayments[editingKey] !== undefined;
+                          const displayVal = payment.fd_returns != null ? formatCurrency(payment.fd_returns) : '–';
+                          if (isEditing) {
+                            return (
+                              <div className="flex items-center justify-center gap-1">
+                                <Input
+                                  type="number"
+                                  step="0.01"
+                                  placeholder="0"
+                                  value={editingPayments[editingKey]}
+                                  onChange={(e) => setEditingPayments(prev => ({ ...prev, [editingKey]: e.target.value }))}
+                                  className="w-24 h-8 text-sm"
+                                  onBlur={() => {
+                                    const raw = editingPayments[editingKey];
+                                    const newValue = raw === '' ? null : parseNumber(raw);
+                                    if (newValue === null || newValue >= 0) {
+                                      handleSavePaymentField(payment.payment_id, 'fd_returns', newValue ?? '');
+                                    } else {
+                                      cancelEditing(payment.payment_id, 'fd_returns');
+                                    }
+                                  }}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                      const raw = editingPayments[editingKey];
+                                      const newValue = raw === '' ? null : parseNumber(raw);
+                                      if (newValue === null || newValue >= 0) {
+                                        handleSavePaymentField(payment.payment_id, 'fd_returns', newValue ?? '');
+                                      }
+                                    } else if (e.key === 'Escape') {
+                                      cancelEditing(payment.payment_id, 'fd_returns');
+                                    }
+                                  }}
+                                  autoFocus
+                                />
+                              </div>
+                            );
+                          }
+                          return (
+                            <span
+                              className="cursor-pointer hover:bg-muted/50 rounded px-2 py-1 -mx-2 -my-1"
+                              onClick={() => isAdmin && startEditingPayment(payment.payment_id, 'fd_returns', payment.fd_returns ?? 0)}
+                              title={isAdmin ? 'Click to edit' : ''}
+                            >
+                              {displayVal}
                             </span>
                           );
                         })()}
